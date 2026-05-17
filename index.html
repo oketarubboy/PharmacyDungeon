@@ -24,6 +24,14 @@
         プレイヤー名
         <input id="playerName" maxlength="12" placeholder="なまえ" />
       </label>
+
+      <label class="nameLabel">
+        職業
+        <select id="classSelect"></select>
+      </label>
+
+      <div id="classInfo" class="classInfo"></div>
+
       <div class="buttonRow">
         <button id="startBtn" class="primaryBtn">探索開始</button>
         <button id="submitRankBtn">ランキング登録</button>
@@ -35,12 +43,14 @@
       <section class="panel statusPanel">
         <h2>薬屋ステータス</h2>
         <div class="character">
-          <div class="avatar" aria-hidden="true">🧪</div>
+          <div class="avatar" id="classIcon" aria-hidden="true">⚔️</div>
           <div class="statList">
+            <div><span>職業</span><strong id="className">調剤剣士</strong></div>
             <div><span>Lv</span><strong id="level">1</strong></div>
             <div><span>到達階層</span><strong id="floor">1F</strong></div>
             <div><span>戦闘力</span><strong id="power">0</strong></div>
             <div><span>ゴールド</span><strong id="gold">0G</strong></div>
+            <div><span>ポーション</span><strong id="potions">3個</strong></div>
           </div>
         </div>
 
@@ -68,7 +78,8 @@
         <div class="enemyCard">
           <div class="enemyIcon" id="enemyIcon">🐭</div>
           <div class="enemyInfo">
-            <div class="enemyName" id="enemyName">スライム</div>
+            <div class="enemyName" id="enemyName">眠たいスライム</div>
+            <div class="enemyMeta" id="enemyMeta">通常</div>
             <div class="barBlock compact">
               <div class="barTitle"><span>敵HP</span><span id="enemyHpText">20 / 20</span></div>
               <div class="bar"><div id="enemyHpBar" class="barFill enemy"></div></div>
@@ -78,7 +89,7 @@
 
         <div class="buttonRow battleButtons">
           <button id="potionBtn">ポーション使用</button>
-          <button id="bossBtn">ボス挑戦</button>
+          <button id="bossBtn">エリートボス挑戦</button>
           <button id="sellBtn">不要装備を売却</button>
         </div>
 

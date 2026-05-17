@@ -1,7 +1,7 @@
 {
   "name": "放置ハクスラ薬屋ダンジョン",
   "short_name": "薬屋D",
-  "description": "1画面で遊べる放置ハクスラPWAサンプル",
+  "description": "職業システム付き放置ハクスラPWAサンプル",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",

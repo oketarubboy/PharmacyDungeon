@@ -1,4 +1,4 @@
-const CACHE_NAME = "yakudungeon-pwa-v1";
+const CACHE_NAME = "yakudungeon-pwa-v2-class";
 const ASSETS = [
   "./",
   "./index.html",

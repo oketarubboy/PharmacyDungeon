@@ -1,15 +1,6 @@
 /**
  * 放置ハクスラ薬屋ダンジョン - Google Apps Script ランキングAPI
- *
- * 使い方:
- * 1. Googleスプレッドシートを新規作成
- * 2. 拡張機能 > Apps Script を開く
- * 3. このCode.gsを貼り付け
- * 4. setup() を1回実行
- * 5. デプロイ > 新しいデプロイ > ウェブアプリ
- *    - 次のユーザーとして実行: 自分
- *    - アクセスできるユーザー: 全員
- * 6. 発行されたWebアプリURLを app.js の GAS_WEB_APP_URL に貼り付け
+ * 職業システム対応版
  */
 
 const SPREADSHEET_ID = ""; // 空欄なら、このスクリプトに紐づくスプレッドシートを使用
@@ -22,6 +13,8 @@ const HEADERS = [
   "createdAt",
   "userId",
   "name",
+  "classId",
+  "className",
   "level",
   "floor",
   "power",
@@ -37,9 +30,16 @@ function setup() {
   if (ranking.getLastRow() === 0) {
     ranking.appendRow(HEADERS);
   } else {
-    const current = ranking.getRange(1, 1, 1, HEADERS.length).getValues()[0];
-    if (current.join("") === "") {
+    const current = ranking.getRange(1, 1, 1, Math.max(ranking.getLastColumn(), HEADERS.length)).getValues()[0];
+    const isEmpty = current.join("") === "";
+    if (isEmpty) {
       ranking.getRange(1, 1, 1, HEADERS.length).setValues([HEADERS]);
+    } else {
+      HEADERS.forEach((header, idx) => {
+        if (current[idx] !== header) {
+          ranking.getRange(1, idx + 1).setValue(header);
+        }
+      });
     }
   }
 
@@ -90,6 +90,8 @@ function submit_(params, event) {
 
     const userId = cleanText_(params.userId, 80);
     const name = cleanText_(params.name || "薬屋さん", 12);
+    const classId = cleanText_(params.classId || "", 40);
+    const className = cleanText_(params.className || "", 20);
     const level = toInt_(params.level, 1, 9999);
     const floor = toInt_(params.floor, 1, 999999);
     const power = toInt_(params.power, 0, 99999999);
@@ -106,12 +108,12 @@ function submit_(params, event) {
     }
 
     const maxReasonableScore =
-      floor * 2200 +
-      level * 1400 +
-      power * 30 +
-      enemies * 150 +
-      rareDrops * 9000 +
-      100000;
+      floor * 2600 +
+      level * 1700 +
+      power * 35 +
+      enemies * 180 +
+      rareDrops * 10000 +
+      150000;
 
     if (score > maxReasonableScore) {
       appendLog_("submit", false, "score validation error", userId, name, score);
@@ -128,6 +130,8 @@ function submit_(params, event) {
       new Date(),
       userId,
       name,
+      classId,
+      className,
       level,
       floor,
       power,
@@ -143,7 +147,7 @@ function submit_(params, event) {
     return {
       ok: true,
       message: "登録しました。",
-      item: { name, level, floor, power, score, enemies, rareDrops }
+      item: { name, classId, className, level, floor, power, score, enemies, rareDrops }
     };
   } finally {
     lock.releaseLock();
@@ -165,17 +169,37 @@ function ranking_(params) {
   const bestByUser = {};
 
   values.forEach((row) => {
-    const item = {
-      createdAt: row[0],
-      userId: String(row[1] || ""),
-      name: String(row[2] || "薬屋さん"),
-      level: Number(row[3] || 1),
-      floor: Number(row[4] || 1),
-      power: Number(row[5] || 0),
-      score: Number(row[6] || 0),
-      enemies: Number(row[7] || 0),
-      rareDrops: Number(row[8] || 0)
-    };
+    // 旧版のranking行は classId / className が無い10列構成です。
+    // 旧行も読めるよう、4列目が数値なら旧形式として扱います。
+    const legacyRow = row[3] !== "" && !isNaN(Number(row[3])) && String(row[4] || "") !== "";
+
+    const item = legacyRow
+      ? {
+          createdAt: row[0],
+          userId: String(row[1] || ""),
+          name: String(row[2] || "薬屋さん"),
+          classId: "",
+          className: "",
+          level: Number(row[3] || 1),
+          floor: Number(row[4] || 1),
+          power: Number(row[5] || 0),
+          score: Number(row[6] || 0),
+          enemies: Number(row[7] || 0),
+          rareDrops: Number(row[8] || 0)
+        }
+      : {
+          createdAt: row[0],
+          userId: String(row[1] || ""),
+          name: String(row[2] || "薬屋さん"),
+          classId: String(row[3] || ""),
+          className: String(row[4] || ""),
+          level: Number(row[5] || 1),
+          floor: Number(row[6] || 1),
+          power: Number(row[7] || 0),
+          score: Number(row[8] || 0),
+          enemies: Number(row[9] || 0),
+          rareDrops: Number(row[10] || 0)
+        };
 
     if (!item.userId) return;
     if (!bestByUser[item.userId] || item.score > bestByUser[item.userId].score) {
@@ -188,6 +212,8 @@ function ranking_(params) {
     .slice(0, limit)
     .map((item) => ({
       name: item.name,
+      classId: item.classId,
+      className: item.className,
       level: item.level,
       floor: item.floor,
       power: item.power,
