@@ -1,7 +1,7 @@
 {
   "name": "Pharmacy Dungeon",
   "short_name": "PharmacyD",
-  "description": "複数ダンジョン・周回・職業解放付き放置ハクスラPWA v4.1.0",
+  "description": "複数ダンジョン・周回・職業解放付き放置ハクスラPWA v4.1.1",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",

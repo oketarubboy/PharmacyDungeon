@@ -1,11 +1,11 @@
 /* Pharmacy Dungeon - PWA sample
  * 複数ダンジョン・中ボス・大ボス・周回・職業熟練度・自動装備対応版です。
- * Version: v4.1.0
+ * Version: v4.1.1
  */
 const GAS_WEB_APP_URL = "https://script.google.com/macros/s/AKfycbwfZ6rzQ1XN-LVvCsi9jamdmW4G3xnnwizEdBH-LPY_rUjarhYFwyVyOWYzd67IACQh/exec";
 const API_KEY = "yakudungeon-demo-key"; // gas/Code.gs 側の API_KEY と同じ値にしてください。
 
-const APP_VERSION = "v4.1.0";
+const APP_VERSION = "v4.1.1";
 const STORAGE_KEY = "pharmacyDungeon.save.v4.dungeons";
 const LEGACY_STORAGE_KEYS = ["yakudungeon.save.v3.mastery", "yakudungeon.save.v2.class", "yakudungeon.save.v1"];
 const USER_ID_KEY = "yakudungeon.userId.v1";
@@ -624,8 +624,8 @@ function getClass(source = state) {
   return classData[source.classId] || classData.novice;
 }
 
-function masteryLevel(id) {
-  const exp = Number(state.classMastery?.[id] || 0);
+function masteryLevel(id, source = state) {
+  const exp = Number((source.classMastery || {})[id] || 0);
   return masteryLevelFromExp(exp);
 }
 
@@ -922,7 +922,7 @@ function calcMaxHp(source = state) {
   const cls = getClass(source);
   const base = 100 + (source.level || 1) * 10;
   const affixBonus = 1 + affixTotal("hpPct", source) / 100;
-  const masteryBonus = 1 + Math.min(0.20, masteryLevel(source.classId || "novice") * 0.006);
+  const masteryBonus = 1 + Math.min(0.20, masteryLevel(source.classId || "novice", source) * 0.006);
   return Math.floor(base * cls.hpMult * affixBonus * masteryBonus);
 }
 
