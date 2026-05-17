@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
   <meta name="theme-color" content="#265c4b" />
-  <title>放置ハクスラ薬屋ダンジョン</title>
+  <title>Pharmacy Dungeon</title>
   <link rel="manifest" href="./manifest.json" />
   <link rel="apple-touch-icon" href="./icons/icon-192.png" />
   <link rel="stylesheet" href="./style.css" />
@@ -13,8 +13,8 @@
   <main class="app">
     <header class="heroHeader">
       <div>
-        <p class="eyebrow">PWA Idle Hack & Slash</p>
-        <h1>放置ハクスラ薬屋ダンジョン</h1>
+        <p class="eyebrow">PWA IDLE HACK &amp; SLASH v4.0.0</p>
+        <h1>Pharmacy Dungeon</h1>
       </div>
       <button id="installBtn" class="ghostBtn hidden">ホーム画面に追加</button>
     </header>
@@ -30,7 +30,13 @@
         <select id="classSelect"></select>
       </label>
 
+      <label class="nameLabel">
+        ダンジョン
+        <select id="dungeonSelect"></select>
+      </label>
+
       <div id="classInfo" class="classInfo"></div>
+      <div id="dungeonInfo" class="dungeonInfo"></div>
 
       <div class="buttonRow">
         <button id="startBtn" class="primaryBtn">探索開始</button>
@@ -41,14 +47,14 @@
 
     <section class="grid">
       <section class="panel statusPanel">
-        <h2>薬屋ステータス</h2>
+        <h2>ステータス</h2>
         <div class="character">
           <div class="avatar" id="classIcon" aria-hidden="true">🔰</div>
           <div class="statList">
             <div><span>職業</span><strong id="className">新人薬剤師</strong></div>
             <div><span>熟練度</span><strong id="masteryText">Lv0</strong></div>
             <div><span>Lv</span><strong id="level">1</strong></div>
-            <div><span>到達階層</span><strong id="floor">1F</strong></div>
+            <div><span>到達階層</span><strong id="floor">薬草の森1F</strong></div>
             <div><span>戦闘力</span><strong id="power">0</strong></div>
             <div><span>ポーション</span><strong id="potions">3個</strong></div>
             <div><span>ゴールド</span><strong id="gold">0G</strong></div>
@@ -96,7 +102,7 @@
 
         <div class="buttonRow battleButtons">
           <button id="potionBtn">ポーション使用</button>
-          <button id="bossBtn">エリートボス挑戦</button>
+          <button id="bossBtn">強敵挑戦</button>
           <button id="sellBtn">不要装備を売却</button>
         </div>
 

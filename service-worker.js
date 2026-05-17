@@ -1,7 +1,7 @@
 {
-  "name": "放置ハクスラ薬屋ダンジョン",
-  "short_name": "薬屋D",
-  "description": "職業解放・熟練度・自動装備付き放置ハクスラPWAサンプル",
+  "name": "Pharmacy Dungeon",
+  "short_name": "PharmacyD",
+  "description": "複数ダンジョン・周回・職業解放付き放置ハクスラPWA v4.0.0",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",
