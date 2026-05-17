@@ -1,134 +1,127 @@
-<!doctype html>
-<html lang="ja">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
-  <meta name="theme-color" content="#265c4b" />
-  <title>Pharmacy Dungeon</title>
-  <link rel="manifest" href="./manifest.json" />
-  <link rel="apple-touch-icon" href="./icons/icon-192.png" />
-  <link rel="stylesheet" href="./style.css" />
-</head>
-<body>
-  <main class="app">
-    <header class="heroHeader">
-      <div>
-        <p class="eyebrow">PWA IDLE HACK &amp; SLASH v4.0.0</p>
-        <h1>Pharmacy Dungeon</h1>
-      </div>
-      <button id="installBtn" class="ghostBtn hidden">ホーム画面に追加</button>
-    </header>
+# Pharmacy Dungeon
 
-    <section class="panel namePanel">
-      <label class="nameLabel">
-        プレイヤー名
-        <input id="playerName" maxlength="12" placeholder="なまえ" />
-      </label>
+PWA IDLE HACK & SLASH v4.1.0
 
-      <label class="nameLabel">
-        職業 / 転職
-        <select id="classSelect"></select>
-      </label>
+「1画面で遊べるハクスラPWA」＋「Googleスプレッドシートランキング」のサンプルです。
 
-      <label class="nameLabel">
-        ダンジョン
-        <select id="dungeonSelect"></select>
-      </label>
+## 今回の変更点
 
-      <div id="classInfo" class="classInfo"></div>
-      <div id="dungeonInfo" class="dungeonInfo"></div>
+- アプリ名を `Pharmacy Dungeon` に変更
+- 画面上部の `PWA IDLE HACK & SLASH` の後ろにバージョン `v4.0.0` を表示
+- 複数ダンジョンを追加
+- 各ダンジョンの途中に中ボスを配置
+- 各ダンジョンの最下層に大ボスを配置
+- 大ボス撃破後、そのダンジョンを1Fから周回可能
+- 到達階層を `薬草の森1F` のように表示
+- ランキング送信にダンジョン名・ダンジョン階層・周回数を追加
+- PWAキャッシュ名を `pharmacy-dungeon-pwa-v4-1-force-update` に更新
 
-      <div class="buttonRow">
-        <button id="startBtn" class="primaryBtn">探索開始</button>
-        <button id="submitRankBtn">ランキング登録</button>
-        <button id="resetBtn" class="dangerBtn">リセット</button>
-      </div>
-    </section>
+## 設定済みWebアプリURL
 
-    <section class="grid">
-      <section class="panel statusPanel">
-        <h2>ステータス</h2>
-        <div class="character">
-          <div class="avatar" id="classIcon" aria-hidden="true">🔰</div>
-          <div class="statList">
-            <div><span>職業</span><strong id="className">新人薬剤師</strong></div>
-            <div><span>熟練度</span><strong id="masteryText">Lv0</strong></div>
-            <div><span>Lv</span><strong id="level">1</strong></div>
-            <div><span>到達階層</span><strong id="floor">薬草の森1F</strong></div>
-            <div><span>戦闘力</span><strong id="power">0</strong></div>
-            <div><span>ポーション</span><strong id="potions">3個</strong></div>
-            <div><span>ゴールド</span><strong id="gold">0G</strong></div>
-            <div><span>転職解放</span><strong id="unlockedCount">1職</strong></div>
-          </div>
-        </div>
+```js
+const GAS_WEB_APP_URL = "https://script.google.com/macros/s/AKfycbwfZ6rzQ1XN-LVvCsi9jamdmW4G3xnnwizEdBH-LPY_rUjarhYFwyVyOWYzd67IACQh/exec";
+```
 
-        <div class="barBlock">
-          <div class="barTitle"><span>HP</span><span id="hpText">100 / 100</span></div>
-          <div class="bar"><div id="hpBar" class="barFill hp"></div></div>
-        </div>
-        <div class="barBlock">
-          <div class="barTitle"><span>EXP</span><span id="expText">0 / 30</span></div>
-          <div class="bar"><div id="expBar" class="barFill exp"></div></div>
-        </div>
+## ダンジョン一覧
 
-        <div class="equipment">
-          <h3>装備</h3>
-          <div id="equipmentList"></div>
-        </div>
-      </section>
+| ダンジョン | 階層 | 中ボス | 大ボス | 解放条件 |
+|---|---:|---|---|---|
+| 薬草の森 | 20F | 10F | 20F | 最初から |
+| 調剤地下道 | 30F | 15F | 30F | 薬草の森1周クリア、総合到達18F |
+| 監査塔 | 40F | 20F | 40F | 調剤地下道1周クリア、総合到達35F |
+| 奈落処方庫 | 50F | 25F・40F | 50F | 監査塔1周クリア、総合到達55F |
 
-      <section class="panel battlePanel">
-        <div class="battleTop">
-          <h2>バトル</h2>
-          <span id="stateBadge" class="badge">停止中</span>
-        </div>
+## 周回仕様
 
-        <div class="enemyCard">
-          <div class="enemyIcon" id="enemyIcon">🐭</div>
-          <div class="enemyInfo">
-            <div class="enemyName" id="enemyName">眠たいスライム</div>
-            <div class="enemyMeta" id="enemyMeta">通常</div>
-            <div class="barBlock compact">
-              <div class="barTitle"><span>敵HP</span><span id="enemyHpText">20 / 20</span></div>
-              <div class="bar"><div id="enemyHpBar" class="barFill enemy"></div></div>
-            </div>
-          </div>
-        </div>
+大ボスを倒すと、そのダンジョンのクリア回数が増えます。
 
-        <label class="checkLabel">
-          <input id="autoEquipBetter" type="checkbox" />
-          <span>今より強い装備が落ちたら自動装備する</span>
-        </label>
+例:
 
-        <div class="buttonRow battleButtons">
-          <button id="potionBtn">ポーション使用</button>
-          <button id="bossBtn">強敵挑戦</button>
-          <button id="sellBtn">不要装備を売却</button>
-        </div>
+```text
+薬草の森20Fの大ボス撃破
+↓
+薬草の森クリア回数 +1
+↓
+薬草の森1Fへ戻る
+```
 
-        <div class="dropBox">
-          <h3>最新ドロップ</h3>
-          <div id="dropInfo" class="muted">まだ装備を拾っていません。</div>
-          <button id="equipDropBtn" class="hidden">装備する</button>
-        </div>
-      </section>
+同じダンジョンを繰り返し周回できます。
 
-      <section class="panel rankingPanel">
-        <div class="rankingHeader">
-          <h2>オンラインランキング</h2>
-          <button id="reloadRankBtn" class="smallBtn">更新</button>
-        </div>
-        <div id="rankMessage" class="muted">Google Apps Script URL未設定時は端末内のデモランキングを表示します。</div>
-        <ol id="rankingList" class="rankingList"></ol>
-      </section>
+周回数が増えると、そのダンジョンの敵が少し強くなります。
 
-      <section class="panel logPanel">
-        <h2>冒険ログ</h2>
-        <div id="log" class="log"></div>
-      </section>
-    </section>
-  </main>
+## 表示仕様
 
-  <script src="./app.js"></script>
-</body>
-</html>
+到達階層は、以下の形式で表示します。
+
+```text
+薬草の森1F
+調剤地下道15F
+監査塔40F
+奈落処方庫25F
+```
+
+## GitHub Pagesで使う方法
+
+ZIPを展開し、以下のファイルをリポジトリ直下へアップロードしてください。
+
+```text
+index.html
+style.css
+app.js
+manifest.json
+service-worker.js
+icons/
+gas/
+README.md
+```
+
+GitHub Pagesを有効化すると、以下のようなURLで開けます。
+
+```text
+https://ユーザー名.github.io/リポジトリ名/
+```
+
+## Apps Scriptについて
+
+オンラインランキングにダンジョン名・ダンジョン階層・周回数を保存するため、Apps Script側も最新版の `gas/Code.gs` に差し替えてください。
+
+既存のランキング行も可能な範囲で読み取れるようにしています。
+
+## PWA更新時の注意
+
+GitHubを更新しても古い画面が残る場合は、ブラウザ側のPWAキャッシュが残っています。  
+今回の版では `service-worker.js` のキャッシュ名を変更済みです。
+
+```js
+const CACHE_NAME = "pharmacy-dungeon-pwa-v4-1-force-update";
+```
+
+
+## v4.1.0 更新機能
+
+画面右上に `最新版に更新` ボタンを追加しました。
+
+このボタンは以下を実行します。
+
+1. 現在のセーブデータを保存
+2. 登録済みService Workerを解除
+3. Cache Storageを削除
+4. URLに `?v=` を付けて再読み込み
+
+セーブデータは `localStorage` に残すため、通常のゲーム進行データは消えません。
+
+## 更新されない場合の対処
+
+GitHub Pagesへ上書き後、画面が古いままの場合は以下の順で試してください。
+
+1. アプリ画面右上の `最新版に更新` を押す
+2. ブラウザで `Ctrl + F5`
+3. Edge/Chromeの開発者ツール > Application > Service Workers > Unregister
+4. Application > Storage > Clear site data
+5. URL末尾に `?v=任意の数字` を付けて開く
+
+例:
+
+```text
+https://ユーザー名.github.io/リポジトリ名/?v=410
+```

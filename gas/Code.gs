@@ -1,6 +1,6 @@
 /**
- * 放置ハクスラ薬屋ダンジョン - Google Apps Script ランキングAPI
- * 職業システム対応版
+ * Pharmacy Dungeon - Google Apps Script ランキングAPI
+ * 職業・複数ダンジョン対応版
  */
 
 const SPREADSHEET_ID = ""; // 空欄なら、このスクリプトに紐づくスプレッドシートを使用
@@ -15,6 +15,10 @@ const HEADERS = [
   "name",
   "classId",
   "className",
+  "dungeonId",
+  "dungeonName",
+  "dungeonFloor",
+  "dungeonClears",
   "level",
   "floor",
   "power",
@@ -92,6 +96,10 @@ function submit_(params, event) {
     const name = cleanText_(params.name || "薬屋さん", 12);
     const classId = cleanText_(params.classId || "", 40);
     const className = cleanText_(params.className || "", 20);
+    const dungeonId = cleanText_(params.dungeonId || "", 40);
+    const dungeonName = cleanText_(params.dungeonName || "", 30);
+    const dungeonFloor = toInt_(params.dungeonFloor, 1, 999999);
+    const dungeonClears = toInt_(params.dungeonClears, 0, 999999);
     const level = toInt_(params.level, 1, 9999);
     const floor = toInt_(params.floor, 1, 999999);
     const power = toInt_(params.power, 0, 99999999);
@@ -108,12 +116,14 @@ function submit_(params, event) {
     }
 
     const maxReasonableScore =
-      floor * 2600 +
-      level * 1700 +
-      power * 35 +
-      enemies * 180 +
-      rareDrops * 10000 +
-      150000;
+      floor * 3200 +
+      dungeonFloor * 2200 +
+      dungeonClears * 25000 +
+      level * 1800 +
+      power * 38 +
+      enemies * 200 +
+      rareDrops * 11000 +
+      180000;
 
     if (score > maxReasonableScore) {
       appendLog_("submit", false, "score validation error", userId, name, score);
@@ -132,6 +142,10 @@ function submit_(params, event) {
       name,
       classId,
       className,
+      dungeonId,
+      dungeonName,
+      dungeonFloor,
+      dungeonClears,
       level,
       floor,
       power,
@@ -147,7 +161,7 @@ function submit_(params, event) {
     return {
       ok: true,
       message: "登録しました。",
-      item: { name, classId, className, level, floor, power, score, enemies, rareDrops }
+      item: { name, classId, className, dungeonId, dungeonName, dungeonFloor, dungeonClears, level, floor, power, score, enemies, rareDrops }
     };
   } finally {
     lock.releaseLock();
@@ -165,42 +179,11 @@ function ranking_(params) {
     return { ok: true, items: [] };
   }
 
-  const values = sheet.getRange(2, 1, lastRow - 1, HEADERS.length).getValues();
+  const values = sheet.getRange(2, 1, lastRow - 1, Math.max(sheet.getLastColumn(), HEADERS.length)).getValues();
   const bestByUser = {};
 
   values.forEach((row) => {
-    // 旧版のranking行は classId / className が無い10列構成です。
-    // 旧行も読めるよう、4列目が数値なら旧形式として扱います。
-    const legacyRow = row[3] !== "" && !isNaN(Number(row[3])) && String(row[4] || "") !== "";
-
-    const item = legacyRow
-      ? {
-          createdAt: row[0],
-          userId: String(row[1] || ""),
-          name: String(row[2] || "薬屋さん"),
-          classId: "",
-          className: "",
-          level: Number(row[3] || 1),
-          floor: Number(row[4] || 1),
-          power: Number(row[5] || 0),
-          score: Number(row[6] || 0),
-          enemies: Number(row[7] || 0),
-          rareDrops: Number(row[8] || 0)
-        }
-      : {
-          createdAt: row[0],
-          userId: String(row[1] || ""),
-          name: String(row[2] || "薬屋さん"),
-          classId: String(row[3] || ""),
-          className: String(row[4] || ""),
-          level: Number(row[5] || 1),
-          floor: Number(row[6] || 1),
-          power: Number(row[7] || 0),
-          score: Number(row[8] || 0),
-          enemies: Number(row[9] || 0),
-          rareDrops: Number(row[10] || 0)
-        };
-
+    const item = parseRankingRow_(row);
     if (!item.userId) return;
     if (!bestByUser[item.userId] || item.score > bestByUser[item.userId].score) {
       bestByUser[item.userId] = item;
@@ -214,6 +197,10 @@ function ranking_(params) {
       name: item.name,
       classId: item.classId,
       className: item.className,
+      dungeonId: item.dungeonId,
+      dungeonName: item.dungeonName,
+      dungeonFloor: item.dungeonFloor,
+      dungeonClears: item.dungeonClears,
       level: item.level,
       floor: item.floor,
       power: item.power,
@@ -223,6 +210,69 @@ function ranking_(params) {
     }));
 
   return { ok: true, items };
+}
+
+function parseRankingRow_(row) {
+  // v4形式: classId/className/dungeonId/dungeonName/dungeonFloor...
+  if (row.length >= 16 && String(row[5] || "") !== "" && String(row[9] || "") !== "") {
+    return {
+      createdAt: row[0],
+      userId: String(row[1] || ""),
+      name: String(row[2] || "薬屋さん"),
+      classId: String(row[3] || ""),
+      className: String(row[4] || ""),
+      dungeonId: String(row[5] || ""),
+      dungeonName: String(row[6] || ""),
+      dungeonFloor: Number(row[7] || 1),
+      dungeonClears: Number(row[8] || 0),
+      level: Number(row[9] || 1),
+      floor: Number(row[10] || 1),
+      power: Number(row[11] || 0),
+      score: Number(row[12] || 0),
+      enemies: Number(row[13] || 0),
+      rareDrops: Number(row[14] || 0)
+    };
+  }
+
+  // v3形式: classId/className/level/floor/power...
+  if (row.length >= 12 && String(row[3] || "") !== "" && isNaN(Number(row[3])) && !isNaN(Number(row[5]))) {
+    return {
+      createdAt: row[0],
+      userId: String(row[1] || ""),
+      name: String(row[2] || "薬屋さん"),
+      classId: String(row[3] || ""),
+      className: String(row[4] || ""),
+      dungeonId: "",
+      dungeonName: "",
+      dungeonFloor: 0,
+      dungeonClears: 0,
+      level: Number(row[5] || 1),
+      floor: Number(row[6] || 1),
+      power: Number(row[7] || 0),
+      score: Number(row[8] || 0),
+      enemies: Number(row[9] || 0),
+      rareDrops: Number(row[10] || 0)
+    };
+  }
+
+  // v1/v2形式: class情報なし
+  return {
+    createdAt: row[0],
+    userId: String(row[1] || ""),
+    name: String(row[2] || "薬屋さん"),
+    classId: "",
+    className: "",
+    dungeonId: "",
+    dungeonName: "",
+    dungeonFloor: 0,
+    dungeonClears: 0,
+    level: Number(row[3] || 1),
+    floor: Number(row[4] || 1),
+    power: Number(row[5] || 0),
+    score: Number(row[6] || 0),
+    enemies: Number(row[7] || 0),
+    rareDrops: Number(row[8] || 0)
+  };
 }
 
 function isRateLimited_(userId) {
