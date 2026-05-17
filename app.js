@@ -1,15 +1,16 @@
 /* Pharmacy Dungeon - PWA sample
  * 複数ダンジョン・中ボス・大ボス・周回・職業熟練度・自動装備対応版です。
- * Version: v4.2.0
+ * Version: v4.3.0
  */
 const GAS_WEB_APP_URL = "https://script.google.com/macros/s/AKfycbwfZ6rzQ1XN-LVvCsi9jamdmW4G3xnnwizEdBH-LPY_rUjarhYFwyVyOWYzd67IACQh/exec";
 const API_KEY = "yakudungeon-demo-key"; // gas/Code.gs 側の API_KEY と同じ値にしてください。
 
-const APP_VERSION = "v4.2.0";
-const STORAGE_KEY = "pharmacyDungeon.save.v4_2.preparation";
-const LEGACY_STORAGE_KEYS = ["pharmacyDungeon.save.v4.dungeons", "yakudungeon.save.v3.mastery", "yakudungeon.save.v2.class", "yakudungeon.save.v1"];
+const APP_VERSION = "v4.3.0";
+const STORAGE_KEY = "pharmacyDungeon.save.v4_3.dungeon_level";
+const LEGACY_STORAGE_KEYS = ["pharmacyDungeon.save.v4_2.preparation", "pharmacyDungeon.save.v4.dungeons", "yakudungeon.save.v3.mastery", "yakudungeon.save.v2.class", "yakudungeon.save.v1"];
 const USER_ID_KEY = "yakudungeon.userId.v1";
 const RARITY_ORDER = { N: 1, R: 2, SR: 3, SSR: 4, UR: 5 };
+const RARITY_LIST = ["N", "R", "SR", "SSR", "UR"];
 
 const classData = {
   novice: {
@@ -262,6 +263,8 @@ const dungeonData = {
     finalBoss: { name: "森の調剤獣", icon: "🐺" },
     difficulty: 1.00,
     rewardMult: 1.00,
+    baseMaxRarity: "R",
+    rarityUnlocks: { 2: "SR", 4: "SSR", 7: "UR" },
     desc: "初心者向け。薬草系モンスターが多く、基本職解放に向いたダンジョン。",
     unlock: null
   },
@@ -275,6 +278,8 @@ const dungeonData = {
     finalBoss: { name: "地下道の処方竜", icon: "🐉" },
     difficulty: 1.22,
     rewardMult: 1.18,
+    baseMaxRarity: "SR",
+    rarityUnlocks: { 3: "SSR", 6: "UR" },
     desc: "中級向け。敵が硬くなる代わりに、経験値とゴールドが増える。",
     unlock: { clears: { herbForest: 1 }, floor: 18 }
   },
@@ -288,6 +293,8 @@ const dungeonData = {
     finalBoss: { name: "棚卸し魔王", icon: "👑" },
     difficulty: 1.50,
     rewardMult: 1.42,
+    baseMaxRarity: "SSR",
+    rarityUnlocks: { 4: "UR" },
     desc: "上級向け。特殊能力付きの敵が増え、上級職育成に向く。",
     unlock: { clears: { capsuleCave: 1 }, floor: 35 }
   },
@@ -301,6 +308,8 @@ const dungeonData = {
     finalBoss: { name: "奈落処方の支配者", icon: "🕯️" },
     difficulty: 1.90,
     rewardMult: 1.75,
+    baseMaxRarity: "UR",
+    rarityUnlocks: {},
     desc: "最深部向け。中ボスが複数出現し、最上級職の力を試す高難度ダンジョン。",
     unlock: { clears: { auditTower: 1 }, floor: 55 }
   }
@@ -379,7 +388,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
 function bindElements() {
   [
-    "installBtn", "forceUpdateBtn", "playerName", "classSelect", "dungeonSelect", "classInfo", "dungeonInfo", "classIcon", "className", "masteryText", "unlockedCount",
+    "installBtn", "forceUpdateBtn", "playerName", "classSelect", "dungeonSelect", "dungeonLevelSelect", "classInfo", "dungeonInfo", "classIcon", "className", "masteryText", "unlockedCount",
     "startBtn", "submitRankBtn", "resetBtn", "level", "floor", "power", "gold", "potions", "hpText", "hpBar",
     "expText", "expBar", "equipmentList", "stateBadge", "phaseBadge", "enemyIcon", "enemyName", "enemyMeta", "enemyHpText",
     "enemyHpBar", "autoEquipBetter", "potionBtn", "bossBtn", "retireDungeonBtn", "sellBtn", "inventorySelect",
@@ -476,9 +485,27 @@ function bindEvents() {
 
     if (next === state.dungeonId) return;
     state.dungeonId = next;
+    normalizeDungeonLevel(state.dungeonId);
     state.dungeonFloor = 1;
     state.enemy = makeCurrentEnemy();
-    log(`${currentDungeon().name}へ移動しました。1Fから探索します。`);
+    log(`${currentDungeon().name}へ移動しました。ダンジョンLv${currentDungeonLevel()}の1Fから探索します。`);
+    render();
+    save();
+  });
+
+  on("dungeonLevelSelect", "change", () => {
+    if (state.phase !== "preparation") {
+      els.dungeonLevelSelect.value = String(currentDungeonLevel());
+      log("探索フェーズ中はダンジョンレベルを変更できません。");
+      return;
+    }
+
+    const max = maxDungeonLevel(state.dungeonId);
+    const nextLevel = Math.max(0, Math.min(max, Number(els.dungeonLevelSelect.value || 0)));
+    state.dungeonLevels[state.dungeonId] = nextLevel;
+    state.dungeonFloor = 1;
+    state.enemy = makeCurrentEnemy();
+    log(`${currentDungeon().name}のダンジョンLvを${nextLevel}に変更しました。1Fから開始します。`);
     render();
     save();
   });
@@ -553,6 +580,8 @@ function createInitialState() {
     dungeonId: "herbForest",
     dungeonFloor: 1,
     dungeonClears: { herbForest: 0, capsuleCave: 0, auditTower: 0, abyssPharmacy: 0 },
+    dungeonLevels: { herbForest: 0, capsuleCave: 0, auditTower: 0, abyssPharmacy: 0 },
+    bossRewardsClaimed: {},
     autoEquipBetter: true,
     phase: "preparation",
     selectedInventoryId: "",
@@ -626,7 +655,10 @@ function load() {
     }
 
     state.dungeonClears = { ...initial.dungeonClears, ...(parsed.dungeonClears || {}) };
+    state.dungeonLevels = { ...initial.dungeonLevels, ...(parsed.dungeonLevels || {}) };
+    state.bossRewardsClaimed = { ...initial.bossRewardsClaimed, ...(parsed.bossRewardsClaimed || {}) };
     state.dungeonId = dungeonData[state.dungeonId] && isDungeonUnlocked(state.dungeonId) ? state.dungeonId : "herbForest";
+    normalizeDungeonLevel(state.dungeonId);
     state.dungeonFloor = Math.max(1, Math.min(currentDungeon().floors, Number(state.dungeonFloor || 1)));
 
     state.classId = classData[state.classId] && isClassUnlocked(state.classId) ? state.classId : "novice";
@@ -736,6 +768,48 @@ function dungeonClearCount(id) {
   return Number(state.dungeonClears?.[id] || 0);
 }
 
+function maxDungeonLevel(id = state.dungeonId) {
+  // ダンジョンレベルの上限は、そのダンジョンのクリア回数です。
+  return Math.max(0, dungeonClearCount(id));
+}
+
+function currentDungeonLevel(id = state.dungeonId) {
+  normalizeDungeonLevel(id);
+  return Number(state.dungeonLevels?.[id] || 0);
+}
+
+function normalizeDungeonLevel(id = state.dungeonId) {
+  if (!state.dungeonLevels) state.dungeonLevels = {};
+  const max = maxDungeonLevel(id);
+  const current = Number(state.dungeonLevels[id] || 0);
+  state.dungeonLevels[id] = Math.max(0, Math.min(max, current));
+  return state.dungeonLevels[id];
+}
+
+function maxRarityForDungeon(id = state.dungeonId, level = currentDungeonLevel(id)) {
+  const dungeon = dungeonData[id] || dungeonData.herbForest;
+  let max = dungeon.baseMaxRarity || "R";
+
+  Object.entries(dungeon.rarityUnlocks || {}).forEach(([requiredLevel, rarity]) => {
+    if (level >= Number(requiredLevel) && (RARITY_ORDER[rarity] || 0) > (RARITY_ORDER[max] || 0)) {
+      max = rarity;
+    }
+  });
+
+  return max;
+}
+
+function rarityCapText(id = state.dungeonId) {
+  const dungeon = dungeonData[id] || dungeonData.herbForest;
+  const level = currentDungeonLevel(id);
+  const max = maxRarityForDungeon(id, level);
+  const unlocks = Object.entries(dungeon.rarityUnlocks || {})
+    .sort((a, b) => Number(a[0]) - Number(b[0]))
+    .map(([lv, rarity]) => `Lv${lv}で${rarity}`)
+    .join(" / ");
+  return `${max}まで${unlocks ? `（${unlocks}）` : ""}`;
+}
+
 function isDungeonUnlocked(dungeonId) {
   const dungeon = dungeonData[dungeonId];
   if (!dungeon) return false;
@@ -771,11 +845,13 @@ function populateDungeons() {
     const dungeon = dungeonData[id];
     const unlocked = isDungeonUnlocked(id);
     const clears = dungeonClearCount(id);
+    const maxLevel = maxDungeonLevel(id);
+    const level = currentDungeonLevel(id);
     const opt = document.createElement("option");
     opt.value = id;
     opt.disabled = !unlocked;
     opt.textContent = unlocked
-      ? `${dungeon.icon} ${dungeon.name} / ${dungeon.floors}F / ${clears}周クリア`
+      ? `${dungeon.icon} ${dungeon.name} / ${dungeon.floors}F / 周回${clears} / Lv${level}/${maxLevel} / ${maxRarityForDungeon(id, level)}まで`
       : `🔒 ${dungeon.name} / 条件: ${dungeonUnlockText(id)}`;
     els.dungeonSelect.appendChild(opt);
   });
@@ -783,20 +859,38 @@ function populateDungeons() {
   els.dungeonSelect.value = dungeonData[previous] && isDungeonUnlocked(previous) ? previous : state.dungeonId;
 }
 
+function populateDungeonLevels() {
+  if (!els.dungeonLevelSelect) return;
+
+  const max = maxDungeonLevel(state.dungeonId);
+  const current = currentDungeonLevel(state.dungeonId);
+  els.dungeonLevelSelect.innerHTML = "";
+
+  for (let level = 0; level <= max; level += 1) {
+    const opt = document.createElement("option");
+    opt.value = String(level);
+    opt.textContent = `Lv${level} / ${maxRarityForDungeon(state.dungeonId, level)}までドロップ`;
+    els.dungeonLevelSelect.appendChild(opt);
+  }
+
+  els.dungeonLevelSelect.value = String(current);
+}
+
 function makeCurrentEnemy() {
   const dungeon = currentDungeon();
   const floor = Math.max(1, Math.min(dungeon.floors, Number(state.dungeonFloor || 1)));
-  const clears = dungeonClearCount(dungeon.id);
+  const clearCount = dungeonClearCount(dungeon.id);
+  const dungeonLevel = currentDungeonLevel(dungeon.id);
 
   if (floor === dungeon.floors) {
-    return makeEnemy(state.floor, true, "final", dungeon.id, floor, clears);
+    return makeEnemy(state.floor, true, "final", dungeon.id, floor, dungeonLevel, clearCount);
   }
 
   if ((dungeon.midBossFloors || []).includes(floor)) {
-    return makeEnemy(state.floor, true, "mid", dungeon.id, floor, clears);
+    return makeEnemy(state.floor, true, "mid", dungeon.id, floor, dungeonLevel, clearCount);
   }
 
-  return makeEnemy(state.floor, false, "normal", dungeon.id, floor, clears);
+  return makeEnemy(state.floor, false, "normal", dungeon.id, floor, dungeonLevel, clearCount);
 }
 
 function toggleRun() {
@@ -1008,6 +1102,10 @@ function defeatEnemy() {
 
   log(`${enemy.name}を倒しました。EXP+${Math.floor(enemy.exp * reward)} / ${Math.floor(enemy.gold * reward)}G獲得。`);
 
+  if (enemy.isBoss && (enemy.bossKind === "mid" || enemy.bossKind === "final")) {
+    grantFirstBossReward(enemy);
+  }
+
   while (state.exp >= state.expNext) {
     state.exp -= state.expNext;
     levelUp();
@@ -1040,7 +1138,12 @@ function defeatEnemy() {
     state.potions += 2;
     state.dungeonClears[dungeon.id] = dungeonClearCount(dungeon.id) + 1;
     const clearCount = dungeonClearCount(dungeon.id);
-    log(`${dungeon.name}をクリアしました。次は${clearCount + 1}周目として${dungeon.name}1Fから再挑戦できます。`);
+    normalizeDungeonLevel(dungeon.id);
+    log(`${dungeon.name}をクリアしました。ダンジョンLv上限が${clearCount}になりました。準備フェーズでLvを上げて再挑戦できます。`);
+    state.phase = "preparation";
+    state.running = false;
+    if (loopId) clearInterval(loopId);
+    loopId = null;
     state.dungeonFloor = 1;
     announceDungeonUnlocks();
   } else if (enemy.isBoss && enemy.bossKind === "mid") {
@@ -1067,6 +1170,73 @@ function announceDungeonUnlocks() {
   if (unlocked.length) {
     log(`新しいダンジョン解放: ${unlocked.join(" / ")}`);
   }
+}
+
+function bossRewardKey(enemy) {
+  if (!enemy || !enemy.isBoss || !["mid", "final"].includes(enemy.bossKind)) return "";
+  return `${enemy.dungeonId}:${enemy.bossKind}:${enemy.dungeonFloor}`;
+}
+
+function grantFirstBossReward(enemy) {
+  const key = bossRewardKey(enemy);
+  if (!key || state.bossRewardsClaimed[key]) return;
+
+  state.bossRewardsClaimed[key] = true;
+  const reward = generateFirstBossReward(enemy);
+  state.inventory.push(reward);
+
+  const equipped = state.equipment[reward.slot];
+  const diff = itemScore(reward) - itemScore(equipped);
+
+  if (state.autoEquipBetter && diff > 0) {
+    state.equipment[reward.slot] = reward;
+    state.maxHp = calcMaxHp();
+    state.hp = Math.min(state.hp, state.maxHp);
+    log(`初回討伐報酬: ${reward.rarity} ${reward.name} を獲得し、自動装備しました。`);
+  } else {
+    log(`初回討伐報酬: ${reward.rarity} ${reward.name} を獲得しました。装備ストックに保存しました。`);
+  }
+}
+
+function generateFirstBossReward(enemy) {
+  const dungeon = dungeonData[enemy.dungeonId] || dungeonData.herbForest;
+  const dungeonLevel = Number(enemy.dungeonLevel || 0);
+  const rarityId = maxRarityForDungeon(enemy.dungeonId, dungeonLevel);
+  const rarity = rarities.find((r) => r.id === rarityId) || rarities[1];
+  const isFinal = enemy.bossKind === "final";
+
+  const rewardMap = {
+    "herbForest:mid": { slot: "accessory", name: "大鹿の守護角" },
+    "herbForest:final": { slot: "armor", name: "森獣の薬聖白衣" },
+    "capsuleCave:mid": { slot: "weapon", name: "カプセル監視者のロッド" },
+    "capsuleCave:final": { slot: "accessory", name: "処方竜の宝珠" },
+    "auditTower:mid": { slot: "armor", name: "監査双盾の白衣" },
+    "auditTower:final": { slot: "weapon", name: "棚卸し魔王の薬剣" },
+    "abyssPharmacy:mid": { slot: "accessory", name: `奈落在庫番の印章${enemy.dungeonFloor}F` },
+    "abyssPharmacy:final": { slot: "weapon", name: "奈落処方支配者の調律杖" },
+  };
+
+  const baseInfo = rewardMap[`${enemy.dungeonId}:${enemy.bossKind}`] || {
+    slot: isFinal ? "weapon" : "accessory",
+    name: `${dungeon.name}${isFinal ? "大ボス" : "中ボス"}討伐証`,
+  };
+
+  const powerBase = 14 + enemy.dungeonFloor * 2.6 * dungeon.difficulty + dungeonLevel * 8 + state.level * 1.2;
+  const power = Math.floor(powerBase * rarity.mult * (isFinal ? 1.28 : 1.08));
+  const affixes = generateItemAffixes(Math.min(itemAffixPool.length, rarity.affixes + (isFinal ? 2 : 1)));
+
+  return {
+    id: `first_${enemy.dungeonId}_${enemy.bossKind}_${enemy.dungeonFloor}_${Date.now()}`,
+    slot: baseInfo.slot,
+    name: `${baseInfo.name}+${Math.floor(power / 14)}`,
+    rarity: rarity.id,
+    label: rarity.label,
+    power,
+    level: state.floor,
+    value: Math.max(30, Math.floor(power * rarity.mult * 3.2 + affixes.length * 25)),
+    affixes,
+    firstBossReward: true,
+  };
 }
 
 function levelUp() {
@@ -1102,7 +1272,7 @@ function challengeBoss() {
     log("すでに強敵と戦闘中です。");
     return;
   }
-  state.enemy = makeEnemy(state.floor, true, "elite", state.dungeonId, state.dungeonFloor, dungeonClearCount(state.dungeonId));
+  state.enemy = makeEnemy(state.floor, true, "elite", state.dungeonId, state.dungeonFloor, currentDungeonLevel(state.dungeonId), dungeonClearCount(state.dungeonId));
   log(`${state.enemy.name}が乱入しました。通常進行とは別の強敵です。`);
   render();
   save();
@@ -1281,11 +1451,12 @@ function itemScore(item) {
     }, 0);
 }
 
-function makeEnemy(floor, isBoss, bossKind = "elite", dungeonId = "herbForest", dungeonFloor = 1, clearCount = 0) {
+function makeEnemy(floor, isBoss, bossKind = "elite", dungeonId = "herbForest", dungeonFloor = 1, dungeonLevel = 0, clearCount = 0) {
   const dungeon = dungeonData[dungeonId] || dungeonData.herbForest;
-  const loopMult = 1 + clearCount * 0.16;
+  // 周回回数だけでは敵を強化しません。プレイヤーが選んだダンジョンLvでのみ強化します。
+  const levelMult = 1 + dungeonLevel * 0.10;
   const dungeonMult = dungeon.difficulty || 1;
-  const floorPower = floor + dungeonFloor * dungeonMult + clearCount * 8;
+  const floorPower = dungeonFloor * dungeonMult + dungeonLevel * 5;
 
   if (isBoss) {
     const bossBase =
@@ -1295,7 +1466,7 @@ function makeEnemy(floor, isBoss, bossKind = "elite", dungeonId = "herbForest", 
 
     const isFirstMidBoss = bossKind === "mid" && dungeonId === "herbForest" && dungeonFloor === 10 && clearCount === 0;
     const affixBase = bossKind === "final" ? 3 : bossKind === "mid" ? (isFirstMidBoss ? 1 : 2) : 2;
-    let affixes = pickEnemyAffixes(Math.max(affixBase, Math.floor(floor / 20) + affixBase - 1));
+    let affixes = pickEnemyAffixes(Math.max(affixBase, Math.floor(floorPower / 20) + affixBase - 1));
 
     // 最初の中ボス「薬草を守る大鹿」は、鉄壁＋吸血が同時に付くと詰みやすいため抑制します。
     if (isFirstMidBoss) {
@@ -1309,7 +1480,7 @@ function makeEnemy(floor, isBoss, bossKind = "elite", dungeonId = "herbForest", 
 
     const mult = applyEnemyAffixMult(affixes);
     const kindMult = bossKind === "final" ? 1.85 : bossKind === "mid" ? (isFirstMidBoss ? 0.92 : 1.20) : 1.0;
-    const hp = Math.floor((150 + floorPower * 36) * mult.hpMult * dungeonMult * loopMult * kindMult);
+    const hp = Math.floor((150 + floorPower * 36) * mult.hpMult * dungeonMult * levelMult * kindMult);
 
     return {
       ...bossBase,
@@ -1317,10 +1488,11 @@ function makeEnemy(floor, isBoss, bossKind = "elite", dungeonId = "herbForest", 
       bossKind,
       dungeonId,
       dungeonFloor,
+      dungeonLevel,
       affixes,
       maxHp: hp,
       hp,
-      atk: Math.floor((16 + floorPower * 2.85) * mult.atkMult * dungeonMult * loopMult * (bossKind === "final" ? 1.25 : isFirstMidBoss ? 0.82 : 1.0)),
+      atk: Math.floor((16 + floorPower * 2.85) * mult.atkMult * dungeonMult * levelMult * (bossKind === "final" ? 1.25 : isFirstMidBoss ? 0.82 : 1.0)),
       exp: Math.floor((60 + floorPower * 12) * dungeon.rewardMult * kindMult),
       gold: Math.floor((55 + floorPower * 10) * dungeon.rewardMult * kindMult),
       rewardMult: mult.rewardMult * dungeon.rewardMult * (bossKind === "final" ? 1.75 : bossKind === "mid" ? 1.32 : 1.20),
@@ -1333,10 +1505,10 @@ function makeEnemy(floor, isBoss, bossKind = "elite", dungeonId = "herbForest", 
 
   const index = Math.min(enemyTemplates.length - 1, Math.floor((floorPower - 1) / 7));
   const t = enemyTemplates[index] || enemyTemplates.at(-1);
-  const affixCount = floor >= 35 ? 2 : floor >= 10 ? 1 : 0;
+  const affixCount = floorPower >= 35 ? 2 : floorPower >= 10 ? 1 : 0;
   const affixes = pickEnemyAffixes(affixCount);
   const mult = applyEnemyAffixMult(affixes);
-  const scale = (1 + floorPower * 0.095 + Math.floor(floorPower / 25) * 0.18) * dungeonMult * loopMult;
+  const scale = (1 + floorPower * 0.095 + Math.floor(floorPower / 25) * 0.18) * dungeonMult * levelMult;
   const maxHp = Math.floor(t.hp * scale * mult.hpMult);
 
   return {
@@ -1345,6 +1517,7 @@ function makeEnemy(floor, isBoss, bossKind = "elite", dungeonId = "herbForest", 
     bossKind: "normal",
     dungeonId,
     dungeonFloor,
+    dungeonLevel,
     affixes,
     maxHp,
     hp: maxHp,
@@ -1377,8 +1550,10 @@ function applyEnemyAffixMult(affixes) {
 
 function generateDrop(isBoss, treasureBonus = false) {
   const slot = slots[randInt(0, slots.length - 1)].key;
-  const rarity = pickRarity(isBoss, treasureBonus);
-  const base = Math.floor(6 + state.floor * 2.15 + state.level * 1.75);
+  const rarity = pickRarity(isBoss, treasureBonus, state.dungeonId, currentDungeonLevel(state.dungeonId));
+  const dungeon = currentDungeon();
+  const dungeonLevel = currentDungeonLevel(state.dungeonId);
+  const base = Math.floor(6 + state.dungeonFloor * 2.15 * dungeon.difficulty + dungeonLevel * 7 + state.level * 1.25);
   const power = Math.floor((base + randInt(0, 10)) * rarity.mult * (isBoss ? 1.35 : 1));
   const names = itemNames[slot];
   const name = `${prefixByRarity(rarity.id)}${names[randInt(0, names.length - 1)]}+${Math.floor(power / 14)}`;
@@ -1397,18 +1572,23 @@ function generateDrop(isBoss, treasureBonus = false) {
   };
 }
 
-function pickRarity(isBoss, treasureBonus = false) {
+function pickRarity(isBoss, treasureBonus = false, dungeonId = state.dungeonId, dungeonLevel = currentDungeonLevel(dungeonId)) {
   const cls = getClass();
   const bonus = isBoss ? 2.15 : 1.0;
   const treasure = treasureBonus ? 1.35 : 1.0;
   const classDrop = 1 + cls.dropBonus;
-  const table = rarities.map((r) => {
-    let chance = r.chance;
-    if (r.id === "SR" || r.id === "SSR" || r.id === "UR") {
-      chance *= bonus * treasure * classDrop;
-    }
-    return { ...r, chance };
-  });
+  const maxRarity = maxRarityForDungeon(dungeonId, dungeonLevel);
+  const maxOrder = RARITY_ORDER[maxRarity] || RARITY_ORDER.R;
+
+  const table = rarities
+    .filter((r) => (RARITY_ORDER[r.id] || 0) <= maxOrder)
+    .map((r) => {
+      let chance = r.chance;
+      if (r.id === "SR" || r.id === "SSR" || r.id === "UR") {
+        chance *= bonus * treasure * classDrop;
+      }
+      return { ...r, chance };
+    });
 
   const total = table.reduce((sum, r) => sum + r.chance, 0);
   let roll = Math.random() * total;
@@ -1416,7 +1596,7 @@ function pickRarity(isBoss, treasureBonus = false) {
     roll -= r.chance;
     if (roll <= 0) return r;
   }
-  return table[0];
+  return table[0] || rarities[0];
 }
 
 function generateItemAffixes(count) {
@@ -1449,6 +1629,7 @@ function calcScore() {
   return Math.floor(
     state.floor * 1700 +
     state.dungeonFloor * 1200 +
+    currentDungeonLevel(state.dungeonId) * 5000 +
     Object.values(state.dungeonClears || {}).reduce((s, v) => s + Number(v || 0), 0) * 12000 +
     state.level * 850 +
     calcBattlePower() * 18 +
@@ -1475,6 +1656,8 @@ async function submitRanking() {
     dungeonId: state.dungeonId,
     dungeonName: currentDungeon().name,
     dungeonFloor: state.dungeonFloor,
+    dungeonLevel: currentDungeonLevel(state.dungeonId),
+    maxRarity: maxRarityForDungeon(state.dungeonId),
     dungeonClears: dungeonClearCount(state.dungeonId),
     level: state.level,
     floor: state.floor,
@@ -1595,7 +1778,7 @@ function renderRanking(items) {
       <div class="rankNo">${idx + 1}</div>
       <div>
         <div class="rankName">${escapeHtml(item.name || "薬屋さん")} <span class="rankMeta">${escapeHtml(item.className || "")}</span></div>
-        <div class="rankMeta">Lv${Number(item.level || 1)} / ${escapeHtml(item.dungeonName || "")}${item.dungeonFloor ? Number(item.dungeonFloor) + "F" : Number(item.floor || 1) + "F"} / 戦闘力${Number(item.power || 0).toLocaleString()}</div>
+        <div class="rankMeta">Lv${Number(item.level || 1)} / ${escapeHtml(item.dungeonName || "")}${item.dungeonFloor ? Number(item.dungeonFloor) + "F" : Number(item.floor || 1) + "F"}${item.dungeonLevel !== undefined ? " / DLv" + Number(item.dungeonLevel || 0) : ""} / 戦闘力${Number(item.power || 0).toLocaleString()}</div>
       </div>
       <div class="rankScore">${Number(item.score || 0).toLocaleString()}</div>
     `;
@@ -1624,7 +1807,7 @@ function populateClasses() {
 }
 
 function render() {
-  const requiredIds = ["classSelect", "dungeonSelect", "startBtn", "hpBar", "expBar", "floor", "inventorySelect", "phaseBadge"];
+  const requiredIds = ["classSelect", "dungeonSelect", "dungeonLevelSelect", "startBtn", "hpBar", "expBar", "floor", "inventorySelect", "phaseBadge"];
   const missing = requiredIds.filter((id) => !els[id]);
   if (missing.length) {
     console.error("[Pharmacy Dungeon] 必須HTML部品が不足しています。GitHub上のindex.htmlが古い可能性があります:", missing);
@@ -1636,12 +1819,14 @@ function render() {
 
   populateClasses();
   populateDungeons();
+  populateDungeonLevels();
 
   els.playerName.value = state.playerName || "";
   els.autoEquipBetter.checked = !!state.autoEquipBetter;
   const isPreparation = state.phase === "preparation";
   els.classSelect.disabled = !isPreparation;
   els.dungeonSelect.disabled = !isPreparation;
+  els.dungeonLevelSelect.disabled = !isPreparation || maxDungeonLevel(state.dungeonId) === 0;
   els.inventorySelect.disabled = !isPreparation || state.inventory.length === 0;
   els.equipStockBtn.disabled = !isPreparation || state.inventory.length === 0;
   els.sellSelectedBtn.disabled = !isPreparation || state.inventory.length === 0;
@@ -1655,7 +1840,7 @@ function render() {
   els.unlockedCount.textContent = `${unlockedClassCount()}職`;
   els.classInfo.innerHTML = `<strong>${cls.icon} ${cls.name}（${cls.tier}）</strong>：${escapeHtml(cls.desc)}<br><span class="muted">現在熟練Lv${masteryLevel(cls.id)} / 解放条件: ${escapeHtml(unlockText(cls.id))}</span>`;
   const dungeon = currentDungeon();
-  els.dungeonInfo.innerHTML = `<strong>${dungeon.icon} ${dungeon.name}</strong>：${escapeHtml(dungeon.desc)}<br><span class="muted">現在 ${dungeonProgressLabel()} / 中ボス ${dungeon.midBossFloors.join("F・")}F / 最下層 ${dungeon.floors}F / ${dungeonClearCount(dungeon.id)}周クリア</span>`;
+  els.dungeonInfo.innerHTML = `<strong>${dungeon.icon} ${dungeon.name}</strong>：${escapeHtml(dungeon.desc)}<br><span class="muted">現在 ${dungeonProgressLabel()} / ダンジョンLv${currentDungeonLevel(dungeon.id)} / Lv上限${maxDungeonLevel(dungeon.id)} / ドロップ${rarityCapText(dungeon.id)} / ${dungeonClearCount(dungeon.id)}周クリア</span>`;
 
   els.startBtn.textContent = state.phase === "exploration" ? "探索停止して準備へ" : "探索開始";
   els.stateBadge.textContent = state.phase === "exploration" ? "探索中" : "準備中";

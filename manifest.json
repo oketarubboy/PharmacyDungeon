@@ -1,7 +1,7 @@
 {
   "name": "Pharmacy Dungeon",
   "short_name": "PharmacyD",
-  "description": "準備フェーズ・装備ストック・売却機能付き放置ハクスラPWA v4.2.0",
+  "description": "ダンジョンレベル・ドロップレア制限・初回討伐報酬付き放置ハクスラPWA v4.3.0",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",

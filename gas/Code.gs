@@ -18,6 +18,8 @@ const HEADERS = [
   "dungeonId",
   "dungeonName",
   "dungeonFloor",
+  "dungeonLevel",
+  "maxRarity",
   "dungeonClears",
   "level",
   "floor",
@@ -99,6 +101,8 @@ function submit_(params, event) {
     const dungeonId = cleanText_(params.dungeonId || "", 40);
     const dungeonName = cleanText_(params.dungeonName || "", 30);
     const dungeonFloor = toInt_(params.dungeonFloor, 1, 999999);
+    const dungeonLevel = toInt_(params.dungeonLevel, 0, 999999);
+    const maxRarity = cleanText_(params.maxRarity || "", 10);
     const dungeonClears = toInt_(params.dungeonClears, 0, 999999);
     const level = toInt_(params.level, 1, 9999);
     const floor = toInt_(params.floor, 1, 999999);
@@ -118,6 +122,7 @@ function submit_(params, event) {
     const maxReasonableScore =
       floor * 3200 +
       dungeonFloor * 2200 +
+      dungeonLevel * 9000 +
       dungeonClears * 25000 +
       level * 1800 +
       power * 38 +
@@ -145,6 +150,8 @@ function submit_(params, event) {
       dungeonId,
       dungeonName,
       dungeonFloor,
+      dungeonLevel,
+      maxRarity,
       dungeonClears,
       level,
       floor,
@@ -161,7 +168,7 @@ function submit_(params, event) {
     return {
       ok: true,
       message: "登録しました。",
-      item: { name, classId, className, dungeonId, dungeonName, dungeonFloor, dungeonClears, level, floor, power, score, enemies, rareDrops }
+      item: { name, classId, className, dungeonId, dungeonName, dungeonFloor, dungeonLevel, maxRarity, dungeonClears, level, floor, power, score, enemies, rareDrops }
     };
   } finally {
     lock.releaseLock();
@@ -200,6 +207,8 @@ function ranking_(params) {
       dungeonId: item.dungeonId,
       dungeonName: item.dungeonName,
       dungeonFloor: item.dungeonFloor,
+      dungeonLevel: item.dungeonLevel,
+      maxRarity: item.maxRarity,
       dungeonClears: item.dungeonClears,
       level: item.level,
       floor: item.floor,
@@ -213,7 +222,30 @@ function ranking_(params) {
 }
 
 function parseRankingRow_(row) {
-  // v4形式: classId/className/dungeonId/dungeonName/dungeonFloor...
+  // v4.3形式: classId/className/dungeonId/dungeonName/dungeonFloor/dungeonLevel/maxRarity/dungeonClears...
+  if (row.length >= 18 && String(row[5] || "") !== "" && String(row[9] || "") !== "" && isNaN(Number(row[9]))) {
+    return {
+      createdAt: row[0],
+      userId: String(row[1] || ""),
+      name: String(row[2] || "薬屋さん"),
+      classId: String(row[3] || ""),
+      className: String(row[4] || ""),
+      dungeonId: String(row[5] || ""),
+      dungeonName: String(row[6] || ""),
+      dungeonFloor: Number(row[7] || 1),
+      dungeonLevel: Number(row[8] || 0),
+      maxRarity: String(row[9] || ""),
+      dungeonClears: Number(row[10] || 0),
+      level: Number(row[11] || 1),
+      floor: Number(row[12] || 1),
+      power: Number(row[13] || 0),
+      score: Number(row[14] || 0),
+      enemies: Number(row[15] || 0),
+      rareDrops: Number(row[16] || 0)
+    };
+  }
+
+  // v4.0-v4.2形式: classId/className/dungeonId/dungeonName/dungeonFloor/dungeonClears/level...
   if (row.length >= 16 && String(row[5] || "") !== "" && String(row[9] || "") !== "") {
     return {
       createdAt: row[0],
@@ -224,6 +256,8 @@ function parseRankingRow_(row) {
       dungeonId: String(row[5] || ""),
       dungeonName: String(row[6] || ""),
       dungeonFloor: Number(row[7] || 1),
+      dungeonLevel: 0,
+      maxRarity: "",
       dungeonClears: Number(row[8] || 0),
       level: Number(row[9] || 1),
       floor: Number(row[10] || 1),
@@ -245,6 +279,8 @@ function parseRankingRow_(row) {
       dungeonId: "",
       dungeonName: "",
       dungeonFloor: 0,
+      dungeonLevel: 0,
+      maxRarity: "",
       dungeonClears: 0,
       level: Number(row[5] || 1),
       floor: Number(row[6] || 1),
@@ -265,6 +301,8 @@ function parseRankingRow_(row) {
     dungeonId: "",
     dungeonName: "",
     dungeonFloor: 0,
+    dungeonLevel: 0,
+    maxRarity: "",
     dungeonClears: 0,
     level: Number(row[3] || 1),
     floor: Number(row[4] || 1),

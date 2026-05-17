@@ -136,7 +136,7 @@ h3 {
 
 .namePanel {
   display: grid;
-  grid-template-columns: minmax(145px, 0.8fr) minmax(210px, 1fr) minmax(210px, 1fr) minmax(260px, 1.1fr) minmax(260px, 1.1fr) auto;
+  grid-template-columns: minmax(135px, 0.75fr) minmax(190px, 0.95fr) minmax(190px, 0.95fr) minmax(120px, 0.55fr) minmax(250px, 1.1fr) minmax(250px, 1.1fr) auto;
   align-items: end;
   gap: 12px;
   margin-bottom: 14px;
