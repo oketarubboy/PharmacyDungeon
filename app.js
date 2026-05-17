@@ -1,11 +1,11 @@
 /* Pharmacy Dungeon - PWA sample
  * 複数ダンジョン・中ボス・大ボス・周回・職業熟練度・自動装備対応版です。
- * Version: v4.1.1
+ * Version: v4.1.2
  */
 const GAS_WEB_APP_URL = "https://script.google.com/macros/s/AKfycbwfZ6rzQ1XN-LVvCsi9jamdmW4G3xnnwizEdBH-LPY_rUjarhYFwyVyOWYzd67IACQh/exec";
 const API_KEY = "yakudungeon-demo-key"; // gas/Code.gs 側の API_KEY と同じ値にしてください。
 
-const APP_VERSION = "v4.1.1";
+const APP_VERSION = "v4.1.2";
 const STORAGE_KEY = "pharmacyDungeon.save.v4.dungeons";
 const LEGACY_STORAGE_KEYS = ["yakudungeon.save.v3.mastery", "yakudungeon.save.v2.class", "yakudungeon.save.v1"];
 const USER_ID_KEY = "yakudungeon.userId.v1";
@@ -387,28 +387,36 @@ function bindElements() {
 }
 
 function bindEvents() {
-  els.startBtn.addEventListener("click", toggleRun);
-  els.potionBtn.addEventListener("click", usePotion);
-  els.bossBtn.addEventListener("click", challengeBoss);
-  els.sellBtn.addEventListener("click", sellWeakItems);
-  els.equipDropBtn.addEventListener("click", equipLatestDrop);
-  els.submitRankBtn.addEventListener("click", submitRanking);
-  els.reloadRankBtn.addEventListener("click", loadRanking);
-  els.resetBtn.addEventListener("click", resetGame);
-  els.forceUpdateBtn.addEventListener("click", forceUpdateApp);
+  const on = (id, type, handler) => {
+    if (!els[id]) {
+      console.warn(`[Pharmacy Dungeon] #${id} が見つからないためイベント登録をスキップしました。HTMLキャッシュが古い可能性があります。`);
+      return;
+    }
+    els[id].addEventListener(type, handler);
+  };
 
-  els.playerName.addEventListener("input", () => {
+  on("startBtn", "click", toggleRun);
+  on("potionBtn", "click", usePotion);
+  on("bossBtn", "click", challengeBoss);
+  on("sellBtn", "click", sellWeakItems);
+  on("equipDropBtn", "click", equipLatestDrop);
+  on("submitRankBtn", "click", submitRanking);
+  on("reloadRankBtn", "click", loadRanking);
+  on("resetBtn", "click", resetGame);
+  on("forceUpdateBtn", "click", forceUpdateApp);
+
+  on("playerName", "input", () => {
     state.playerName = sanitizeName(els.playerName.value);
     save();
   });
 
-  els.autoEquipBetter.addEventListener("change", () => {
+  on("autoEquipBetter", "change", () => {
     state.autoEquipBetter = els.autoEquipBetter.checked;
     log(state.autoEquipBetter ? "自動装備をONにしました。" : "自動装備をOFFにしました。");
     save();
   });
 
-  els.classSelect.addEventListener("change", () => {
+  on("classSelect", "change", () => {
     const next = els.classSelect.value;
     if (!classData[next]) return;
 
@@ -429,7 +437,7 @@ function bindEvents() {
     save();
   });
 
-  els.dungeonSelect.addEventListener("change", () => {
+  on("dungeonSelect", "change", () => {
     const next = els.dungeonSelect.value;
     if (!dungeonData[next]) return;
 
@@ -452,15 +460,15 @@ function bindEvents() {
   window.addEventListener("beforeinstallprompt", (event) => {
     event.preventDefault();
     deferredInstallPrompt = event;
-    els.installBtn.classList.remove("hidden");
+    if (els.installBtn) els.installBtn.classList.remove("hidden");
   });
 
-  els.installBtn.addEventListener("click", async () => {
+  on("installBtn", "click", async () => {
     if (!deferredInstallPrompt) return;
     deferredInstallPrompt.prompt();
     await deferredInstallPrompt.userChoice;
     deferredInstallPrompt = null;
-    els.installBtn.classList.add("hidden");
+    if (els.installBtn) els.installBtn.classList.add("hidden");
   });
 }
 
@@ -1440,6 +1448,13 @@ function populateClasses() {
 }
 
 function render() {
+  const requiredIds = ["classSelect", "dungeonSelect", "startBtn", "hpBar", "expBar", "floor"];
+  const missing = requiredIds.filter((id) => !els[id]);
+  if (missing.length) {
+    console.error("[Pharmacy Dungeon] 必須HTML部品が不足しています。GitHub上のindex.htmlが古い可能性があります:", missing);
+    return;
+  }
+
   const cls = getClass();
   state.maxHp = calcMaxHp();
 

@@ -1,13 +1,13 @@
 # Pharmacy Dungeon
 
-PWA IDLE HACK & SLASH v4.1.1
+PWA IDLE HACK & SLASH v4.1.2
 
 「1画面で遊べるハクスラPWA」＋「Googleスプレッドシートランキング」のサンプルです。
 
 ## 今回の変更点
 
 - アプリ名を `Pharmacy Dungeon` に変更
-- 画面上部の `PWA IDLE HACK & SLASH` の後ろにバージョン `v4.0.0` を表示
+- 画面上部の `PWA IDLE HACK & SLASH` の後ろにバージョン `v4.1.2` を表示
 - 複数ダンジョンを追加
 - 各ダンジョンの途中に中ボスを配置
 - 各ダンジョンの最下層に大ボスを配置
@@ -97,7 +97,7 @@ const CACHE_NAME = "pharmacy-dungeon-pwa-v4-1-1-startup-fix";
 ```
 
 
-## v4.1.1 更新機能
+## v4.1.2 更新機能
 
 画面右上に `最新版に更新` ボタンを追加しました。
 
@@ -127,7 +127,7 @@ https://ユーザー名.github.io/リポジトリ名/?v=410
 ```
 
 
-## v4.1.1 起動不具合修正
+## v4.1.2 起動不具合修正
 
 初期データ作成時に、まだ準備前の `state` を参照してJavaScriptが停止する問題を修正しました。
 
@@ -137,4 +137,15 @@ https://ユーザー名.github.io/リポジトリ名/?v=410
 1. URL末尾に ?v=411 を付けて開く
 2. Ctrl + F5 で強制再読み込み
 3. ブラウザの Application > Storage > Clear site data を実行
+```
+
+
+## v4.1.2 修正内容
+
+古い `index.html` と新しい `app.js` がキャッシュで混在した場合でも、JavaScriptが途中停止しないようにイベント登録を安全化しました。
+
+職業/転職やダンジョンが `オプションなし` になる場合は、古いHTMLまたは古いService Workerが残っています。GitHubへ上書き後、以下のURLのように `?v=412` を付けて開いてください。
+
+```text
+https://ユーザー名.github.io/リポジトリ名/?v=412
 ```
