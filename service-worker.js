@@ -1,4 +1,4 @@
-const CACHE_NAME = "pharmacy-dungeon-pwa-v4-3-dungeon-level";
+const CACHE_NAME = "pharmacy-dungeon-pwa-v4-4-auto-loop-ranking";
 const ASSETS = [
   "./",
   "./index.html",

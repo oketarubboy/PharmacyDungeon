@@ -1,13 +1,13 @@
 /* Pharmacy Dungeon - PWA sample
  * 複数ダンジョン・中ボス・大ボス・周回・職業熟練度・自動装備対応版です。
- * Version: v4.3.0
+ * Version: v4.4.0
  */
 const GAS_WEB_APP_URL = "https://script.google.com/macros/s/AKfycbwfZ6rzQ1XN-LVvCsi9jamdmW4G3xnnwizEdBH-LPY_rUjarhYFwyVyOWYzd67IACQh/exec";
 const API_KEY = "yakudungeon-demo-key"; // gas/Code.gs 側の API_KEY と同じ値にしてください。
 
-const APP_VERSION = "v4.3.0";
-const STORAGE_KEY = "pharmacyDungeon.save.v4_3.dungeon_level";
-const LEGACY_STORAGE_KEYS = ["pharmacyDungeon.save.v4_2.preparation", "pharmacyDungeon.save.v4.dungeons", "yakudungeon.save.v3.mastery", "yakudungeon.save.v2.class", "yakudungeon.save.v1"];
+const APP_VERSION = "v4.4.0";
+const STORAGE_KEY = "pharmacyDungeon.save.v4_4.auto_loop_rank";
+const LEGACY_STORAGE_KEYS = ["pharmacyDungeon.save.v4_3.dungeon_level", "pharmacyDungeon.save.v4_2.preparation", "pharmacyDungeon.save.v4.dungeons", "yakudungeon.save.v3.mastery", "yakudungeon.save.v2.class", "yakudungeon.save.v1"];
 const USER_ID_KEY = "yakudungeon.userId.v1";
 const RARITY_ORDER = { N: 1, R: 2, SR: 3, SSR: 4, UR: 5 };
 const RARITY_LIST = ["N", "R", "SR", "SSR", "UR"];
@@ -376,6 +376,7 @@ let state = createInitialState();
 let loopId = null;
 let latestDrop = null;
 let deferredInstallPrompt = null;
+let autoRankingInProgress = false;
 
 document.addEventListener("DOMContentLoaded", () => {
   bindElements();
@@ -391,7 +392,7 @@ function bindElements() {
     "installBtn", "forceUpdateBtn", "playerName", "classSelect", "dungeonSelect", "dungeonLevelSelect", "classInfo", "dungeonInfo", "classIcon", "className", "masteryText", "unlockedCount",
     "startBtn", "submitRankBtn", "resetBtn", "level", "floor", "power", "gold", "potions", "hpText", "hpBar",
     "expText", "expBar", "equipmentList", "stateBadge", "phaseBadge", "enemyIcon", "enemyName", "enemyMeta", "enemyHpText",
-    "enemyHpBar", "autoEquipBetter", "potionBtn", "bossBtn", "retireDungeonBtn", "sellBtn", "inventorySelect",
+    "enemyHpBar", "autoEquipBetter", "autoLoopDungeon", "potionBtn", "bossBtn", "retireDungeonBtn", "sellBtn", "inventorySelect",
     "inventoryMessage", "inventoryDetail", "equipStockBtn", "sellSelectedBtn", "bulkSellRarity", "bulkSellBtn",
     "dropInfo", "equipDropBtn",
     "reloadRankBtn", "rankMessage", "rankingList", "log"
@@ -434,6 +435,12 @@ function bindEvents() {
   on("autoEquipBetter", "change", () => {
     state.autoEquipBetter = els.autoEquipBetter.checked;
     log(state.autoEquipBetter ? "自動装備をONにしました。" : "自動装備をOFFにしました。");
+    save();
+  });
+
+  on("autoLoopDungeon", "change", () => {
+    state.autoLoopDungeon = els.autoLoopDungeon.checked;
+    log(state.autoLoopDungeon ? "同じダンジョンを自動周回する設定をONにしました。" : "同じダンジョンを自動周回する設定をOFFにしました。");
     save();
   });
 
@@ -583,6 +590,7 @@ function createInitialState() {
     dungeonLevels: { herbForest: 0, capsuleCave: 0, auditTower: 0, abyssPharmacy: 0 },
     bossRewardsClaimed: {},
     autoEquipBetter: true,
+    autoLoopDungeon: false,
     phase: "preparation",
     selectedInventoryId: "",
     running: false,
@@ -640,6 +648,7 @@ function load() {
     state.running = false;
     state.phase = "preparation";
     state.selectedInventoryId = state.selectedInventoryId || "";
+    state.autoLoopDungeon = typeof parsed.autoLoopDungeon === "boolean" ? parsed.autoLoopDungeon : false;
     state.inventory = Array.isArray(state.inventory) ? state.inventory : [];
 
     // 旧版で別職から始まっていた場合も、新仕様では最初は新人薬剤師に戻します。
@@ -893,6 +902,49 @@ function makeCurrentEnemy() {
   return makeEnemy(state.floor, false, "normal", dungeon.id, floor, dungeonLevel, clearCount);
 }
 
+function enterPreparationPhase(message, autoRegister = true) {
+  state.running = false;
+  state.phase = "preparation";
+  if (loopId) clearInterval(loopId);
+  loopId = null;
+
+  if (message) log(message);
+
+  render();
+  save();
+
+  if (autoRegister) {
+    autoSubmitRankingOnPreparation("準備フェーズへ戻ったため、");
+  }
+}
+
+async function autoSubmitRankingOnPreparation(prefix = "") {
+  if (autoRankingInProgress) return;
+  if (state.phase !== "preparation") return;
+
+  const score = calcScore();
+  if (!score || score <= 0) return;
+
+  if (Number(state.lastSubmittedScore || 0) === score) {
+    log("ランキングは前回登録時と同じスコアのため、自動登録をスキップしました。");
+    render();
+    save();
+    return;
+  }
+
+  autoRankingInProgress = true;
+  try {
+    log(`${prefix}ランキングに自動登録します。`);
+    render();
+    save();
+    await submitRanking();
+  } finally {
+    autoRankingInProgress = false;
+    render();
+    save();
+  }
+}
+
 function toggleRun() {
   if (state.phase === "exploration" || state.running) {
     stop();
@@ -916,13 +968,7 @@ function start() {
 }
 
 function stop() {
-  state.running = false;
-  state.phase = "preparation";
-  if (loopId) clearInterval(loopId);
-  loopId = null;
-  log("探索を停止し、準備フェーズへ戻りました。");
-  render();
-  save();
+  enterPreparationPhase("探索を停止し、準備フェーズへ戻りました。", true);
 }
 
 function tick() {
@@ -1139,13 +1185,17 @@ function defeatEnemy() {
     state.dungeonClears[dungeon.id] = dungeonClearCount(dungeon.id) + 1;
     const clearCount = dungeonClearCount(dungeon.id);
     normalizeDungeonLevel(dungeon.id);
-    log(`${dungeon.name}をクリアしました。ダンジョンLv上限が${clearCount}になりました。準備フェーズでLvを上げて再挑戦できます。`);
-    state.phase = "preparation";
-    state.running = false;
-    if (loopId) clearInterval(loopId);
-    loopId = null;
     state.dungeonFloor = 1;
     announceDungeonUnlocks();
+
+    if (state.autoLoopDungeon) {
+      log(`${dungeon.name}をクリアしました。ダンジョンLv上限が${clearCount}になりました。同じダンジョンを1Fから自動周回します。`);
+      state.phase = "exploration";
+      state.running = true;
+    } else {
+      log(`${dungeon.name}をクリアしました。ダンジョンLv上限が${clearCount}になりました。準備フェーズでLvを上げて再挑戦できます。`);
+      enterPreparationPhase("大ボス撃破後、準備フェーズへ戻りました。", true);
+    }
   } else if (enemy.isBoss && enemy.bossKind === "mid") {
     state.floor += 2;
     state.potions += 1;
@@ -1282,17 +1332,11 @@ function retireDungeon() {
   const ok = confirm(`${currentDungeon().name}をリタイアして1Fからやり直します。よろしいですか？`);
   if (!ok) return;
 
-  state.running = false;
-  state.phase = "preparation";
-  if (loopId) clearInterval(loopId);
-  loopId = null;
   state.dungeonFloor = 1;
   state.enemy = makeCurrentEnemy();
   state.hp = Math.max(1, Math.min(state.maxHp, Math.ceil(state.maxHp * 0.75)));
   latestDrop = null;
-  log(`${currentDungeon().name}をリタイアしました。準備フェーズに戻り、1Fからやり直します。`);
-  render();
-  save();
+  enterPreparationPhase(`${currentDungeon().name}をリタイアしました。準備フェーズに戻り、1Fからやり直します。`, true);
 }
 
 function sellWeakItems() {
@@ -1807,7 +1851,7 @@ function populateClasses() {
 }
 
 function render() {
-  const requiredIds = ["classSelect", "dungeonSelect", "dungeonLevelSelect", "startBtn", "hpBar", "expBar", "floor", "inventorySelect", "phaseBadge"];
+  const requiredIds = ["classSelect", "dungeonSelect", "dungeonLevelSelect", "startBtn", "hpBar", "expBar", "floor", "inventorySelect", "phaseBadge", "autoLoopDungeon"];
   const missing = requiredIds.filter((id) => !els[id]);
   if (missing.length) {
     console.error("[Pharmacy Dungeon] 必須HTML部品が不足しています。GitHub上のindex.htmlが古い可能性があります:", missing);
@@ -1823,6 +1867,7 @@ function render() {
 
   els.playerName.value = state.playerName || "";
   els.autoEquipBetter.checked = !!state.autoEquipBetter;
+  els.autoLoopDungeon.checked = !!state.autoLoopDungeon;
   const isPreparation = state.phase === "preparation";
   els.classSelect.disabled = !isPreparation;
   els.dungeonSelect.disabled = !isPreparation;
