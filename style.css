@@ -548,3 +548,56 @@ h3 {
     grid-template-columns: 1fr;
   }
 }
+
+
+.inventoryHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.inventorySelectLabel {
+  margin-top: 12px;
+}
+
+.inventoryDetail {
+  margin-top: 10px;
+  min-height: 72px;
+  padding: 12px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.72);
+  box-shadow: inset 0 0 0 1px var(--line);
+  line-height: 1.45;
+}
+
+.inventoryActions {
+  margin-top: 12px;
+}
+
+.bulkSellRow {
+  display: grid;
+  grid-template-columns: minmax(130px, 180px) 1fr;
+  gap: 10px;
+  align-items: end;
+  margin-top: 12px;
+}
+
+button:disabled,
+select:disabled,
+input:disabled {
+  opacity: 0.52;
+  cursor: not-allowed;
+}
+
+.phaseNotice {
+  margin-top: 8px;
+  color: var(--primary-dark);
+  font-weight: 900;
+}
+
+@media (max-width: 560px) {
+  .bulkSellRow {
+    grid-template-columns: 1fr;
+  }
+}

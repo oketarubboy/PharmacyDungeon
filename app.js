@@ -1,14 +1,15 @@
 /* Pharmacy Dungeon - PWA sample
  * 複数ダンジョン・中ボス・大ボス・周回・職業熟練度・自動装備対応版です。
- * Version: v4.1.2
+ * Version: v4.2.0
  */
 const GAS_WEB_APP_URL = "https://script.google.com/macros/s/AKfycbwfZ6rzQ1XN-LVvCsi9jamdmW4G3xnnwizEdBH-LPY_rUjarhYFwyVyOWYzd67IACQh/exec";
 const API_KEY = "yakudungeon-demo-key"; // gas/Code.gs 側の API_KEY と同じ値にしてください。
 
-const APP_VERSION = "v4.1.2";
-const STORAGE_KEY = "pharmacyDungeon.save.v4.dungeons";
-const LEGACY_STORAGE_KEYS = ["yakudungeon.save.v3.mastery", "yakudungeon.save.v2.class", "yakudungeon.save.v1"];
+const APP_VERSION = "v4.2.0";
+const STORAGE_KEY = "pharmacyDungeon.save.v4_2.preparation";
+const LEGACY_STORAGE_KEYS = ["pharmacyDungeon.save.v4.dungeons", "yakudungeon.save.v3.mastery", "yakudungeon.save.v2.class", "yakudungeon.save.v1"];
 const USER_ID_KEY = "yakudungeon.userId.v1";
+const RARITY_ORDER = { N: 1, R: 2, SR: 3, SSR: 4, UR: 5 };
 
 const classData = {
   novice: {
@@ -380,8 +381,10 @@ function bindElements() {
   [
     "installBtn", "forceUpdateBtn", "playerName", "classSelect", "dungeonSelect", "classInfo", "dungeonInfo", "classIcon", "className", "masteryText", "unlockedCount",
     "startBtn", "submitRankBtn", "resetBtn", "level", "floor", "power", "gold", "potions", "hpText", "hpBar",
-    "expText", "expBar", "equipmentList", "stateBadge", "enemyIcon", "enemyName", "enemyMeta", "enemyHpText",
-    "enemyHpBar", "autoEquipBetter", "potionBtn", "bossBtn", "sellBtn", "dropInfo", "equipDropBtn",
+    "expText", "expBar", "equipmentList", "stateBadge", "phaseBadge", "enemyIcon", "enemyName", "enemyMeta", "enemyHpText",
+    "enemyHpBar", "autoEquipBetter", "potionBtn", "bossBtn", "retireDungeonBtn", "sellBtn", "inventorySelect",
+    "inventoryMessage", "inventoryDetail", "equipStockBtn", "sellSelectedBtn", "bulkSellRarity", "bulkSellBtn",
+    "dropInfo", "equipDropBtn",
     "reloadRankBtn", "rankMessage", "rankingList", "log"
   ].forEach((id) => els[id] = document.getElementById(id));
 }
@@ -398,7 +401,16 @@ function bindEvents() {
   on("startBtn", "click", toggleRun);
   on("potionBtn", "click", usePotion);
   on("bossBtn", "click", challengeBoss);
+  on("retireDungeonBtn", "click", retireDungeon);
   on("sellBtn", "click", sellWeakItems);
+  on("inventorySelect", "change", () => {
+    state.selectedInventoryId = els.inventorySelect.value || "";
+    render();
+    save();
+  });
+  on("equipStockBtn", "click", equipSelectedStockItem);
+  on("sellSelectedBtn", "click", sellSelectedStockItem);
+  on("bulkSellBtn", "click", bulkSellByRarity);
   on("equipDropBtn", "click", equipLatestDrop);
   on("submitRankBtn", "click", submitRanking);
   on("reloadRankBtn", "click", loadRanking);
@@ -420,6 +432,13 @@ function bindEvents() {
     const next = els.classSelect.value;
     if (!classData[next]) return;
 
+    if (state.phase !== "preparation") {
+      log("探索フェーズ中は転職できません。準備フェーズに戻ってから転職してください。");
+      els.classSelect.value = state.classId;
+      render();
+      return;
+    }
+
     if (!isClassUnlocked(next)) {
       log(`${classData[next].name}はまだ解放されていません。`);
       els.classSelect.value = state.classId;
@@ -440,6 +459,13 @@ function bindEvents() {
   on("dungeonSelect", "change", () => {
     const next = els.dungeonSelect.value;
     if (!dungeonData[next]) return;
+
+    if (state.phase !== "preparation") {
+      log("探索フェーズ中はダンジョン変更できません。準備フェーズに戻ってから変更してください。");
+      els.dungeonSelect.value = state.dungeonId;
+      render();
+      return;
+    }
 
     if (!isDungeonUnlocked(next)) {
       log(`${dungeonData[next].name}はまだ解放されていません。`);
@@ -528,6 +554,8 @@ function createInitialState() {
     dungeonFloor: 1,
     dungeonClears: { herbForest: 0, capsuleCave: 0, auditTower: 0, abyssPharmacy: 0 },
     autoEquipBetter: true,
+    phase: "preparation",
+    selectedInventoryId: "",
     running: false,
     level: 1,
     exp: 0,
@@ -544,7 +572,7 @@ function createInitialState() {
     equipment,
     inventory: [],
     enemy: null,
-    logs: ["Pharmacy Dungeonへようこそ。最初は新人薬剤師と薬草の森だけ選択できます。熟練度とクリア状況で転職先・ダンジョンが増えます。"],
+    logs: ["Pharmacy Dungeonへようこそ。準備フェーズで転職・装備変更を行い、探索開始でダンジョンへ進みます。"],
     lastSubmittedScore: 0,
   };
   s.maxHp = calcMaxHp(s);
@@ -581,6 +609,9 @@ function load() {
     const initial = createInitialState();
     state = { ...initial, ...parsed, userId: getUserId() };
     state.running = false;
+    state.phase = "preparation";
+    state.selectedInventoryId = state.selectedInventoryId || "";
+    state.inventory = Array.isArray(state.inventory) ? state.inventory : [];
 
     // 旧版で別職から始まっていた場合も、新仕様では最初は新人薬剤師に戻します。
     // ただし旧職の熟練度は初期値として少しだけ引き継ぎます。
@@ -769,7 +800,7 @@ function makeCurrentEnemy() {
 }
 
 function toggleRun() {
-  if (state.running) {
+  if (state.phase === "exploration" || state.running) {
     stop();
   } else {
     start();
@@ -780,22 +811,28 @@ function start() {
   if (!state.playerName) {
     state.playerName = sanitizeName(els.playerName.value) || "薬屋さん";
   }
+
+  state.phase = "exploration";
   state.running = true;
+  if (loopId) clearInterval(loopId);
   loopId = setInterval(tick, 1000);
-  log("探索を開始しました。");
+  log("準備フェーズから探索フェーズへ移行しました。");
   render();
   save();
 }
 
 function stop() {
   state.running = false;
+  state.phase = "preparation";
   if (loopId) clearInterval(loopId);
   loopId = null;
+  log("探索を停止し、準備フェーズへ戻りました。");
   render();
   save();
 }
 
 function tick() {
+  if (state.phase !== "exploration") return;
   state.maxHp = calcMaxHp();
 
   const cls = getClass();
@@ -1003,7 +1040,7 @@ function defeatEnemy() {
     state.potions += 2;
     state.dungeonClears[dungeon.id] = dungeonClearCount(dungeon.id) + 1;
     const clearCount = dungeonClearCount(dungeon.id);
-    log(`${dungeon.name}をクリアしました。${clearCount + 1}周目として${dungeon.name}1Fから再挑戦できます。`);
+    log(`${dungeon.name}をクリアしました。次は${clearCount + 1}周目として${dungeon.name}1Fから再挑戦できます。`);
     state.dungeonFloor = 1;
     announceDungeonUnlocks();
   } else if (enemy.isBoss && enemy.bossKind === "mid") {
@@ -1056,6 +1093,11 @@ function usePotion(isAuto = false) {
 }
 
 function challengeBoss() {
+  if (state.phase !== "exploration") {
+    log("強敵挑戦は探索フェーズ中のみ実行できます。");
+    return;
+  }
+
   if (state.enemy?.isBoss) {
     log("すでに強敵と戦闘中です。");
     return;
@@ -1066,31 +1108,64 @@ function challengeBoss() {
   save();
 }
 
+function retireDungeon() {
+  const ok = confirm(`${currentDungeon().name}をリタイアして1Fからやり直します。よろしいですか？`);
+  if (!ok) return;
+
+  state.running = false;
+  state.phase = "preparation";
+  if (loopId) clearInterval(loopId);
+  loopId = null;
+  state.dungeonFloor = 1;
+  state.enemy = makeCurrentEnemy();
+  state.hp = Math.max(1, Math.min(state.maxHp, Math.ceil(state.maxHp * 0.75)));
+  latestDrop = null;
+  log(`${currentDungeon().name}をリタイアしました。準備フェーズに戻り、1Fからやり直します。`);
+  render();
+  save();
+}
+
 function sellWeakItems() {
+  if (state.phase !== "preparation") {
+    log("装備の整理・売却は準備フェーズ中のみ実行できます。");
+    return;
+  }
+
   if (!state.inventory.length) {
     log("売却できる装備がありません。");
     return;
   }
 
   let sold = 0;
+  let count = 0;
   let keep = [];
   for (const item of state.inventory) {
     const equipped = state.equipment[item.slot];
-    if (item.id === equipped.id || itemScore(item) >= itemScore(equipped)) {
+    if (isEquippedItem(item) || itemScore(item) >= itemScore(equipped)) {
       keep.push(item);
     } else {
       sold += item.value;
+      count += 1;
     }
   }
   state.inventory = keep;
   state.gold += sold;
-  log(`不要装備を売却し、${sold}Gを獲得しました。`);
+  if (state.selectedInventoryId && !state.inventory.some((i) => i.id === state.selectedInventoryId)) {
+    state.selectedInventoryId = "";
+  }
+  log(`現在装備より弱い装備を${count}個売却し、${sold}Gを獲得しました。`);
   render();
   save();
 }
 
 function equipLatestDrop() {
   if (!latestDrop) return;
+
+  if (state.phase !== "exploration") {
+    log("最新ドロップの即時付け替えは探索フェーズ中のみ可能です。準備フェーズでは装備ストックから付け替えてください。");
+    return;
+  }
+
   state.equipment[latestDrop.slot] = latestDrop;
   state.maxHp = calcMaxHp();
   state.hp = Math.min(state.hp, state.maxHp);
@@ -1098,6 +1173,95 @@ function equipLatestDrop() {
   latestDrop = null;
   render();
   save();
+}
+
+function selectedInventoryItem() {
+  const id = state.selectedInventoryId || els.inventorySelect?.value || "";
+  return state.inventory.find((item) => item.id === id) || null;
+}
+
+function equipSelectedStockItem() {
+  if (state.phase !== "preparation") {
+    log("ストック装備の付け替えは準備フェーズ中のみ可能です。探索フェーズ中は最新ドロップのみ付け替えできます。");
+    return;
+  }
+
+  const item = selectedInventoryItem();
+  if (!item) {
+    log("装備するストック装備を選択してください。");
+    return;
+  }
+
+  state.equipment[item.slot] = item;
+  state.maxHp = calcMaxHp();
+  state.hp = Math.min(state.hp, state.maxHp);
+  log(`ストックから${item.name}を装備しました。`);
+  render();
+  save();
+}
+
+function sellSelectedStockItem() {
+  if (state.phase !== "preparation") {
+    log("装備の売却は準備フェーズ中のみ可能です。");
+    return;
+  }
+
+  const item = selectedInventoryItem();
+  if (!item) {
+    log("売却する装備を選択してください。");
+    return;
+  }
+
+  if (isEquippedItem(item)) {
+    log("現在装備中の装備は売却できません。先に別の装備へ付け替えてください。");
+    return;
+  }
+
+  const ok = confirm(`${item.rarity} ${item.name}を${item.value}Gで売却します。よろしいですか？`);
+  if (!ok) return;
+
+  state.inventory = state.inventory.filter((i) => i.id !== item.id);
+  state.gold += item.value;
+  state.selectedInventoryId = "";
+  log(`${item.name}を売却し、${item.value}Gを獲得しました。`);
+  render();
+  save();
+}
+
+function bulkSellByRarity() {
+  if (state.phase !== "preparation") {
+    log("装備の一括売却は準備フェーズ中のみ可能です。");
+    return;
+  }
+
+  const rarity = els.bulkSellRarity?.value || "N";
+  const threshold = RARITY_ORDER[rarity] || 1;
+  const targets = state.inventory.filter((item) => !isEquippedItem(item) && (RARITY_ORDER[item.rarity] || 0) <= threshold);
+
+  if (!targets.length) {
+    log(`${rarity}以下で売却できる装備がありません。`);
+    return;
+  }
+
+  const total = targets.reduce((sum, item) => sum + Number(item.value || 0), 0);
+  const ok = confirm(`${rarity}以下の未装備アイテム${targets.length}個をまとめて売却し、${total}Gを獲得します。よろしいですか？`);
+  if (!ok) return;
+
+  const sellIds = new Set(targets.map((item) => item.id));
+  state.inventory = state.inventory.filter((item) => !sellIds.has(item.id));
+  state.gold += total;
+  if (state.selectedInventoryId && !state.inventory.some((i) => i.id === state.selectedInventoryId)) {
+    state.selectedInventoryId = "";
+  }
+
+  log(`${rarity}以下の装備を${targets.length}個まとめて売却し、${total}Gを獲得しました。`);
+  render();
+  save();
+}
+
+function isEquippedItem(item) {
+  if (!item) return false;
+  return Object.values(state.equipment || {}).some((equipped) => equipped && equipped.id === item.id);
 }
 
 function itemScore(item) {
@@ -1129,11 +1293,23 @@ function makeEnemy(floor, isBoss, bossKind = "elite", dungeonId = "herbForest", 
       bossKind === "mid" ? dungeon.midBoss :
       bossTemplates[randInt(0, bossTemplates.length - 1)];
 
-    const affixBase = bossKind === "final" ? 3 : bossKind === "mid" ? 2 : 2;
-    const affixes = pickEnemyAffixes(Math.max(affixBase, Math.floor(floor / 20) + affixBase - 1));
+    const isFirstMidBoss = bossKind === "mid" && dungeonId === "herbForest" && dungeonFloor === 10 && clearCount === 0;
+    const affixBase = bossKind === "final" ? 3 : bossKind === "mid" ? (isFirstMidBoss ? 1 : 2) : 2;
+    let affixes = pickEnemyAffixes(Math.max(affixBase, Math.floor(floor / 20) + affixBase - 1));
+
+    // 最初の中ボス「薬草を守る大鹿」は、鉄壁＋吸血が同時に付くと詰みやすいため抑制します。
+    if (isFirstMidBoss) {
+      const hasBarrier = affixes.some((a) => a.id === "barrier");
+      const hasVampire = affixes.some((a) => a.id === "vampire");
+      if (hasBarrier && hasVampire) {
+        affixes = affixes.filter((a) => a.id !== "vampire");
+      }
+      affixes = affixes.slice(0, 1);
+    }
+
     const mult = applyEnemyAffixMult(affixes);
-    const kindMult = bossKind === "final" ? 1.85 : bossKind === "mid" ? 1.28 : 1.0;
-    const hp = Math.floor((160 + floorPower * 42) * mult.hpMult * dungeonMult * loopMult * kindMult);
+    const kindMult = bossKind === "final" ? 1.85 : bossKind === "mid" ? (isFirstMidBoss ? 0.92 : 1.20) : 1.0;
+    const hp = Math.floor((150 + floorPower * 36) * mult.hpMult * dungeonMult * loopMult * kindMult);
 
     return {
       ...bossBase,
@@ -1144,7 +1320,7 @@ function makeEnemy(floor, isBoss, bossKind = "elite", dungeonId = "herbForest", 
       affixes,
       maxHp: hp,
       hp,
-      atk: Math.floor((18 + floorPower * 3.25) * mult.atkMult * dungeonMult * loopMult * (bossKind === "final" ? 1.32 : 1.0)),
+      atk: Math.floor((16 + floorPower * 2.85) * mult.atkMult * dungeonMult * loopMult * (bossKind === "final" ? 1.25 : isFirstMidBoss ? 0.82 : 1.0)),
       exp: Math.floor((60 + floorPower * 12) * dungeon.rewardMult * kindMult),
       gold: Math.floor((55 + floorPower * 10) * dungeon.rewardMult * kindMult),
       rewardMult: mult.rewardMult * dungeon.rewardMult * (bossKind === "final" ? 1.75 : bossKind === "mid" ? 1.32 : 1.20),
@@ -1448,7 +1624,7 @@ function populateClasses() {
 }
 
 function render() {
-  const requiredIds = ["classSelect", "dungeonSelect", "startBtn", "hpBar", "expBar", "floor"];
+  const requiredIds = ["classSelect", "dungeonSelect", "startBtn", "hpBar", "expBar", "floor", "inventorySelect", "phaseBadge"];
   const missing = requiredIds.filter((id) => !els[id]);
   if (missing.length) {
     console.error("[Pharmacy Dungeon] 必須HTML部品が不足しています。GitHub上のindex.htmlが古い可能性があります:", missing);
@@ -1463,6 +1639,15 @@ function render() {
 
   els.playerName.value = state.playerName || "";
   els.autoEquipBetter.checked = !!state.autoEquipBetter;
+  const isPreparation = state.phase === "preparation";
+  els.classSelect.disabled = !isPreparation;
+  els.dungeonSelect.disabled = !isPreparation;
+  els.inventorySelect.disabled = !isPreparation || state.inventory.length === 0;
+  els.equipStockBtn.disabled = !isPreparation || state.inventory.length === 0;
+  els.sellSelectedBtn.disabled = !isPreparation || state.inventory.length === 0;
+  els.bulkSellRarity.disabled = !isPreparation;
+  els.bulkSellBtn.disabled = !isPreparation;
+  els.sellBtn.disabled = !isPreparation;
   els.classSelect.value = cls.id;
   els.classIcon.textContent = cls.icon;
   els.className.textContent = cls.name;
@@ -1472,9 +1657,14 @@ function render() {
   const dungeon = currentDungeon();
   els.dungeonInfo.innerHTML = `<strong>${dungeon.icon} ${dungeon.name}</strong>：${escapeHtml(dungeon.desc)}<br><span class="muted">現在 ${dungeonProgressLabel()} / 中ボス ${dungeon.midBossFloors.join("F・")}F / 最下層 ${dungeon.floors}F / ${dungeonClearCount(dungeon.id)}周クリア</span>`;
 
-  els.startBtn.textContent = state.running ? "探索停止" : "探索開始";
-  els.stateBadge.textContent = state.running ? "探索中" : "停止中";
-  els.stateBadge.style.background = state.running ? "rgba(47, 125, 91, 0.14)" : "rgba(24, 52, 41, 0.08)";
+  els.startBtn.textContent = state.phase === "exploration" ? "探索停止して準備へ" : "探索開始";
+  els.stateBadge.textContent = state.phase === "exploration" ? "探索中" : "準備中";
+  els.phaseBadge.textContent = state.phase === "exploration" ? "探索フェーズ" : "準備フェーズ";
+  els.stateBadge.style.background = state.phase === "exploration" ? "rgba(47, 125, 91, 0.14)" : "rgba(24, 52, 41, 0.08)";
+  els.phaseBadge.style.background = state.phase === "exploration" ? "rgba(245, 184, 75, 0.24)" : "rgba(47, 125, 91, 0.12)";
+  els.inventoryMessage.textContent = state.phase === "exploration"
+    ? "探索フェーズ中です。ストック装備の付け替え・売却はできません。最新ドロップのみ即時装備できます。"
+    : "準備フェーズ中です。転職、ダンジョン変更、ストック装備の付け替え・売却ができます。";
 
   els.level.textContent = state.level;
   els.floor.textContent = dungeonProgressLabel();
@@ -1515,10 +1705,13 @@ function render() {
     const diff = Math.floor(itemScore(latestDrop) - itemScore(equipped));
     els.dropInfo.innerHTML = `<strong class="rarity ${latestDrop.rarity}">${latestDrop.rarity}</strong> ${escapeHtml(latestDrop.name)} / ${slotLabel(latestDrop.slot)} / 装備力 +${latestDrop.power}<br><span class="muted">${formatAffixes(latestDrop)}</span><br><span class="${diff >= 0 ? "rarity SSR" : "muted"}">評価差 ${diff >= 0 ? "+" : ""}${diff}</span>`;
     els.equipDropBtn.classList.remove("hidden");
+    els.equipDropBtn.disabled = state.phase !== "exploration";
   } else {
     els.dropInfo.textContent = "まだ装備を拾っていません。";
     els.equipDropBtn.classList.add("hidden");
   }
+
+  renderInventory();
 
   els.log.innerHTML = "";
   state.logs.slice(-80).forEach((line) => {
@@ -1527,6 +1720,52 @@ function render() {
     p.textContent = line;
     els.log.appendChild(p);
   });
+}
+
+function renderInventory() {
+  if (!els.inventorySelect || !els.inventoryDetail) return;
+
+  const items = [...(state.inventory || [])].sort((a, b) => {
+    const eqDiff = Number(isEquippedItem(b)) - Number(isEquippedItem(a));
+    if (eqDiff) return eqDiff;
+    return itemScore(b) - itemScore(a);
+  });
+
+  els.inventorySelect.innerHTML = "";
+
+  if (!items.length) {
+    const opt = document.createElement("option");
+    opt.value = "";
+    opt.textContent = "ストック装備なし";
+    els.inventorySelect.appendChild(opt);
+    els.inventoryDetail.textContent = "まだストック装備がありません。探索で装備を拾うとここに保存されます。";
+    return;
+  }
+
+  if (!state.selectedInventoryId || !items.some((item) => item.id === state.selectedInventoryId)) {
+    state.selectedInventoryId = items[0].id;
+  }
+
+  items.forEach((item) => {
+    const opt = document.createElement("option");
+    opt.value = item.id;
+    const equipped = isEquippedItem(item) ? "【装備中】" : "";
+    opt.textContent = `${equipped}${item.rarity} ${slotLabel(item.slot)} ${item.name} / 評価${Math.floor(itemScore(item))}`;
+    els.inventorySelect.appendChild(opt);
+  });
+
+  els.inventorySelect.value = state.selectedInventoryId;
+
+  const item = selectedInventoryItem() || items[0];
+  const equipped = isEquippedItem(item);
+  const current = state.equipment[item.slot];
+  const diff = Math.floor(itemScore(item) - itemScore(current));
+  els.inventoryDetail.innerHTML = `
+    <strong class="rarity ${item.rarity}">${item.rarity}</strong> ${escapeHtml(item.name)} ${equipped ? "<span class='badge'>装備中</span>" : ""}<br>
+    ${slotLabel(item.slot)} / 装備力 +${item.power} / 売却 ${item.value}G<br>
+    <span class="muted">${formatAffixes(item)}</span><br>
+    <span class="${diff >= 0 ? "rarity SSR" : "muted"}">現在装備との差 ${diff >= 0 ? "+" : ""}${diff}</span>
+  `;
 }
 
 function formatAffixes(item) {

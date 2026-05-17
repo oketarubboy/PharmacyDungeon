@@ -1,4 +1,4 @@
-const CACHE_NAME = "pharmacy-dungeon-pwa-v4-1-2-safe-start";
+const CACHE_NAME = "pharmacy-dungeon-pwa-v4-2-preparation-inventory";
 const ASSETS = [
   "./",
   "./index.html",
